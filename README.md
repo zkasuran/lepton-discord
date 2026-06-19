@@ -61,18 +61,28 @@ is the whole point of the "exact" scheme: the payer needs USDC, nothing else.
 
 ## How it maps to the judging
 
+This is RFB-1, Autonomous Paying Agents: an agent that discovers, evaluates and
+pays for paywalled APIs on a budget, without overspending. The RFB's own example
+is "BudgetBot, $10/day budget across APIs". That is what this is, on Discord.
+
 - **Agentic sophistication.** The agent decides. Given a free-form request it
   reasons over a priced tool catalog, picks the single cheapest tool that helps
   (or none), and refuses to spend past a budget. It is not a fixed
-  `/price -> CoinGecko` script. See `/ask` declining an over-budget call.
-- **Traction.** Every call is a real on-chain USDC settlement on Arc, so usage is
-  provable, not claimed. The table above is reproducible by anyone with the repo.
+  `/price -> CoinGecko` script. See `/ask` declining an over-budget call. The
+  budget is enforced in code after the model picks, so the model cannot overspend.
+- **Traction.** Mapped to RFB-1's own metrics. Total autonomous payments: every
+  `/ask` that needs data is one. Average transaction size: $0.001, sub-cent, the
+  stated target. Budget efficiency: over-budget calls are declined, not paid.
+  Cost per task: one sub-cent settlement per answered request. Every call is a
+  real on-chain USDC settlement on Arc (table above), provable not claimed.
 - **Circle tooling.** x402 HTTP 402 exact scheme, EIP-3009 USDC on Arc, an
   embedded facilitator that settles in-process, USDC-as-gas. Optional Circle
   developer-controlled wallet path is wired in config.
-- **Innovation.** Buyer-side autonomous agent on Discord, the empty quadrant, plus
-  a spend-governance layer (per-user USDC budgets, decline path, on-chain receipt)
-  that turns a pay-per-call toy into a shared team utility.
+- **Innovation.** Buyer-side autonomous agent on Discord, the empty quadrant
+  (a `discord x402 arc` repo search returns nothing). The spend-governance layer
+  is per-user, so this works in a shared channel: many people, one agent, separate
+  USDC budgets each. The rivals that nail budget enforcement are single-user web
+  or CLI. This is agentic commerce where the users already are.
 
 ## Commands
 
