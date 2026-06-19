@@ -27,6 +27,25 @@ Action = Literal["pay", "decline", "answer_free"]
 _RESPOND_DIRECTLY = "respond_directly"
 
 
+def _norm(name: str) -> str:
+    return "".join(c for c in name.lower() if c.isalnum())
+
+
+def _resolve_tool_name(returned: str, catalog: list[ToolSpec]) -> str | None:
+    """Map a tool name returned by the model back to a catalog name.
+
+    Tolerates provider-side name transforms (camel-casing, suffixes) by matching
+    on a normalized prefix. Returns None for the respond-directly sentinel.
+    """
+    n = _norm(returned)
+    if _norm(_RESPOND_DIRECTLY) in n:
+        return None
+    for tool in catalog:
+        if _norm(tool.name) in n:
+            return tool.name
+    return returned  # unknown; caller handles the miss
+
+
 @dataclass
 class Decision:
     action: Action
@@ -122,10 +141,14 @@ async def _plan(
 
     budget = budget_remaining_atomic / 1_000_000
     system = (
-        "You are a frugal autonomous agent with a USDC budget. "
-        f"You have ${budget:.4f} left. Pick the single cheapest tool that genuinely "
-        "answers the user's request, or respond_directly if no paid data is needed. "
-        "Prefer not to spend. Never pick a tool that costs more than the remaining budget."
+        "You are an autonomous agent with a USDC budget that pays for tools when they help. "
+        f"You have ${budget:.4f} left. "
+        "If the request needs live or real-time data you cannot possibly know (current crypto "
+        "prices, current weather) or premium depth beyond a quick reply, buy the single cheapest "
+        "tool that delivers it. If you can answer well from your own knowledge (general questions, "
+        "chat, explanations), use respond_directly and spend nothing. "
+        "Pick exactly one option. Prefer the cheapest tool that does the job. "
+        "Even when a tool would help, choose respond_directly if its price exceeds the budget left."
     )
     client = AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
     msg = await client.messages.create(
@@ -140,9 +163,10 @@ async def _plan(
         if block.type == "tool_use":
             raw = block.input
             args = raw if isinstance(raw, dict) else {}
-            if block.name == _RESPOND_DIRECTLY:
+            resolved = _resolve_tool_name(block.name, catalog)
+            if resolved is None:
                 return {"tool": None, "reason": str(args.get("reason", ""))}
-            return {"tool": block.name, "args": args, "reason": f"Selected {block.name}."}
+            return {"tool": resolved, "args": args, "reason": f"Selected {resolved}."}
     return {"tool": None, "reason": "Planner returned no tool; answering directly."}
 
 

@@ -49,6 +49,7 @@ Two distinct wallets, real USDC moving between them, every settlement confirmed
 | `/ping` (smoke) | [`a7afaefc…`](https://testnet.arcscan.app/tx/a7afaefc0c810473fd41ad605473bec33df32f02d21888f808276ef4f21c9a3b) | settled, −$0.001 |
 | `/price BTC` (real CoinGecko) | [`ab04f45f…`](https://testnet.arcscan.app/tx/ab04f45fc9949368b01b1bb7666c889e9e18beff1b81675b9840a7bba36b45b2) | `BTC = $63,179 (-1.06% 24h)` |
 | `/weather Tokyo` (real Open-Meteo) | [`4e54d2cc…`](https://testnet.arcscan.app/tx/4e54d2cc9b560b2a1418e84f9b86004514d30c5580bd119fd3776637cd3fa931) | `Tokyo, JP: 22.0°C, overcast` |
+| `/ask` full loop (agent decides → pays → composes) | [`98a743b4…`](https://testnet.arcscan.app/tx/98a743b4ebf8c6f7a59bfb4b32aa7df259d6d98e898fd2db9194e071be3e2c13) | agent paid CoinGecko, answered `BTC $63,034 -1.29%` |
 
 - Agent (payer): `0x6a1b4267921f41f9D5D1FACF998Da9BB930701c4`
 - Service (payTo): `0xDB6c6340342e71A63cD11Ebac2185204b7777777`

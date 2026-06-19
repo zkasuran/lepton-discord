@@ -74,6 +74,18 @@ def test_tool_catalog_lookup() -> None:
     assert get_tool("nope") is None
 
 
+def test_resolve_tool_name_tolerates_provider_transforms() -> None:
+    from src.agent.tools import TOOL_CATALOG
+
+    # Exact, camel-cased, and suffixed variants all resolve back to the catalog name.
+    assert planner._resolve_tool_name("crypto_price", TOOL_CATALOG) == "crypto_price"
+    assert planner._resolve_tool_name("CompatCryptoPrice60fd2a", TOOL_CATALOG) == "crypto_price"
+    assert planner._resolve_tool_name("tool_weather_v2", TOOL_CATALOG) == "weather"
+    # The respond-directly sentinel maps to None regardless of transform.
+    assert planner._resolve_tool_name("respond_directly", TOOL_CATALOG) is None
+    assert planner._resolve_tool_name("RespondDirectlyXyz", TOOL_CATALOG) is None
+
+
 # --- budget accounting in the store --------------------------------------
 
 
