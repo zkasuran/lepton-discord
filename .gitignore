@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+nanopay.db
+*.db
+dist/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Local strategy / submission artifacts — not for the public code repo
+SUBMIT-PACKET.md
+SUBMIT-FORM.html
+FORM-FILL.html

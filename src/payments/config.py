@@ -1,0 +1,67 @@
+"""Payment layer configuration — Arc testnet + x402 constants.
+
+Wallet model (two distinct parties so USDC actually moves):
+
+  AGENT_PRIVATE_KEY       the payer. Holds testnet USDC, signs EIP-3009.
+                          Needs USDC only — no native gas (facilitator pays gas).
+  SELLER_WALLET_ADDRESS   the service (payTo). Receives the USDC.
+  FACILITATOR_PRIVATE_KEY the relayer. Submits transferWithAuthorization on-chain
+                          and pays gas. Usually the service operator's wallet.
+
+For single-wallet local development, AGENT_PRIVATE_KEY and FACILITATOR_PRIVATE_KEY
+fall back to the legacy DEPLOYER_PRIVATE_KEY (the wallet then pays itself).
+"""
+
+from __future__ import annotations
+
+import os
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Arc testnet
+ARC_NETWORK = os.getenv("ARC_NETWORK", "eip155:5042002")
+ARC_CHAIN_ID = 5042002
+ARC_RPC_URL = os.getenv("ARC_RPC_URL", "https://rpc.testnet.arc.network")
+
+# Arc USDC contract (verified on-chain: name()="USDC", version()="2", decimals=6)
+ARC_USDC_ADDRESS = "0x3600000000000000000000000000000000000000"
+ARC_USDC_NAME = "USDC"
+ARC_USDC_VERSION = "2"
+
+# Legacy single-wallet key (deployer). Kept for backward compatibility / fallback.
+DEPLOYER_PRIVATE_KEY = os.getenv("DEPLOYER_PRIVATE_KEY", "")
+
+# Agent (payer) wallet. Falls back to the deployer key for single-wallet dev mode.
+AGENT_PRIVATE_KEY = os.getenv("AGENT_PRIVATE_KEY", "") or DEPLOYER_PRIVATE_KEY
+
+# Facilitator / relayer wallet. Falls back to the deployer key.
+FACILITATOR_PRIVATE_KEY = os.getenv("FACILITATOR_PRIVATE_KEY", "") or DEPLOYER_PRIVATE_KEY
+
+# Service wallet that receives the USDC (payTo).
+SELLER_WALLET_ADDRESS = os.getenv(
+    "SELLER_WALLET_ADDRESS", "0x0000000000000000000000000000000000000000"
+)
+
+# Default command price: $0.01 USDC (10_000 atomic units, 6 decimals)
+DEFAULT_PRICE_ATOMIC = int(os.getenv("DEFAULT_PRICE_ATOMIC", "10000"))
+
+# Per-user spend budget the agent enforces before paying. Default $0.05.
+DEFAULT_BUDGET_ATOMIC = int(os.getenv("DEFAULT_BUDGET_ATOMIC", "50000"))
+
+# Anthropic (real /ask answers)
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5")
+
+# API server
+API_HOST = os.getenv("API_HOST", "0.0.0.0")
+API_PORT = int(os.getenv("API_PORT", "8402"))
+API_BASE_URL = os.getenv("API_BASE_URL", f"http://localhost:{API_PORT}")
+
+# Discord
+DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
+DISCORD_APP_ID = os.getenv("DISCORD_APP_ID", "")
+
+# SQLite DB path
+DB_PATH = os.getenv("DB_PATH", "nanopay.db")
