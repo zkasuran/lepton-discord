@@ -109,13 +109,13 @@ is "BudgetBot, $10/day budget across APIs". That is what this is, on Discord.
 
 Hexagonal: domain models hold no IO, ports define the seams, adapters do the work.
 
-- `src/agent/` — the brain. `planner.decide()` chooses a tool and enforces the
+- `src/agent/`: the brain. `planner.decide()` chooses a tool and enforces the
   budget in code (not left to the model); `tools.py` is the priced catalog.
-- `src/bot/` — the Discord client and `payer.py`, the x402 client that signs
+- `src/bot/`: the Discord client and `payer.py`, the x402 client that signs
   EIP-3009 from the agent wallet.
-- `src/api/` — FastAPI resource server. `/execute/{id}` is the x402-gated
+- `src/api/`: FastAPI resource server. `/execute/{id}` is the x402-gated
   endpoint; `executor.py` runs the real services (CoinGecko, Open-Meteo, Claude).
-- `src/payments/` — config, the embedded x402 facilitator, the SQLite store.
+- `src/payments/`: config, the embedded x402 facilitator, the SQLite store.
 
 Two wallets, on purpose: the agent (payer) is separate from the service (payTo and
 facilitator), so USDC actually moves between parties instead of round-tripping to
