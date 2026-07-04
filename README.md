@@ -12,10 +12,12 @@ Paying Agents.
 
 ## The gap this fills
 
-Almost every x402-on-Arc project so far is a seller: a paywall, a creator payout,
-a way to charge for content. The buyer side is empty. A GitHub search for
-`discord x402 arc` returns nothing. NanoPay is the buyer: an autonomous agent
-that spends, not an API that charges.
+Almost every x402-on-Arc project is single-user: a website or a CLI, one wallet,
+one person. Buyer-side agents exist now (Keryx settles citation tolls on Arc), but
+they run one user at a time behind a web UI. Nobody has put an autonomous payer in
+the place communities actually live. A GitHub search for `discord x402 arc`
+returns nothing. NanoPay is that: an autonomous buyer inside a shared Discord
+channel, many distinct users each spending under their own USDC budget.
 
 ## The loop
 
@@ -41,23 +43,29 @@ only on the external tools it decides are worth buying.
 ## Live proof (Arc testnet, verified on-chain)
 
 Two distinct wallets, real USDC moving between them, every settlement confirmed
-(status 1). Reproduce with `scripts/e2e_demo.py`.
+(status 1). These are a fresh in-window run (2026-07-04). Reproduce with
+`scripts/e2e_demo.py` and `scripts/agent_demo.py`.
 
 | What | Tx | Result |
 |------|----|--------|
-| Fund agent wallet | [`bcaf7e00…`](https://testnet.arcscan.app/tx/bcaf7e00c11f6e83dc87e86dbd75da4d34f7f40514e3424b63be8cf2d248efc6) | agent funded 0.05 USDC |
-| `/ping` (smoke) | [`a7afaefc…`](https://testnet.arcscan.app/tx/a7afaefc0c810473fd41ad605473bec33df32f02d21888f808276ef4f21c9a3b) | settled, −$0.001 |
-| `/price BTC` (real CoinGecko) | [`ab04f45f…`](https://testnet.arcscan.app/tx/ab04f45fc9949368b01b1bb7666c889e9e18beff1b81675b9840a7bba36b45b2) | `BTC = $63,179 (-1.06% 24h)` |
-| `/weather Tokyo` (real Open-Meteo) | [`4e54d2cc…`](https://testnet.arcscan.app/tx/4e54d2cc9b560b2a1418e84f9b86004514d30c5580bd119fd3776637cd3fa931) | `Tokyo, JP: 22.0°C, overcast` |
-| `/ask` full loop (agent decides → pays → composes) | [`98a743b4…`](https://testnet.arcscan.app/tx/98a743b4ebf8c6f7a59bfb4b32aa7df259d6d98e898fd2db9194e071be3e2c13) | agent paid CoinGecko, answered `BTC $63,034 -1.29%` |
+| `/ping` (smoke) | [`48d60980…`](https://testnet.arcscan.app/tx/48d60980cb6a5da0ca7350f234b34250ec2001ad594a1ca4ceb232aaf1a039a7) | settled, −$0.001 |
+| `/price BTC` (real CoinGecko) | [`ad1f0d04…`](https://testnet.arcscan.app/tx/ad1f0d044f28535353b9d981293ad12e2f02da583d42374630cce3e6a3057c67) | `BTC = $62,498 (+1.85% 24h)` |
+| `/weather Tokyo` (real Open-Meteo) | [`59ab0652…`](https://testnet.arcscan.app/tx/59ab065209b8f5d4c7cf871aaa4528ab4416d23259ca70f478bbe11abe3c13af) | `Tokyo, JP: 23.3°C, partly cloudy` |
+| `/ask` full loop (agent decides → pays → composes) | [`70ca2d2a…`](https://testnet.arcscan.app/tx/70ca2d2aa7e6ff894484d0f6a4f910c4f1e89a3685bb5da30374e42bf75edd2f) | agent chose to pay CoinGecko, answered `BTC $62,486 +1.83%` |
 
 - Agent (payer): `0x6a1b4267921f41f9D5D1FACF998Da9BB930701c4`
 - Service (payTo): `0xDB6c6340342e71A63cD11Ebac2185204b7777777`
 
 Detail worth noticing: the agent's on-chain transaction count is **0**. It paid
-three times and never sent a transaction, because EIP-3009 lets it sign an
-authorization off-chain while the facilitator broadcasts and pays the gas. That
-is the whole point of the "exact" scheme: the payer needs USDC, nothing else.
+every time and never sent a transaction, because EIP-3009 lets it sign an
+authorization off-chain while the facilitator broadcasts and pays the gas. On
+every receipt above the `from` is the facilitator `0xDB6c…`, not the agent, and
+the `to` is the USDC contract `0x3600…`. That is the whole point of the "exact"
+scheme: the payer needs USDC, nothing else.
+
+The three agency branches are reproducible too: `pay` (buys the priced tool),
+`answer_free` (no tool needed, $0 spent) and `decline` (over the per-user budget,
+enforced in code, not by the model).
 
 ## How it maps to the judging
 
@@ -78,11 +86,12 @@ is "BudgetBot, $10/day budget across APIs". That is what this is, on Discord.
 - **Circle tooling.** x402 HTTP 402 exact scheme, EIP-3009 USDC on Arc, an
   embedded facilitator that settles in-process, USDC-as-gas. Optional Circle
   developer-controlled wallet path is wired in config.
-- **Innovation.** Buyer-side autonomous agent on Discord, the empty quadrant
-  (a `discord x402 arc` repo search returns nothing). The spend-governance layer
-  is per-user, so this works in a shared channel: many people, one agent, separate
-  USDC budgets each. The rivals that nail budget enforcement are single-user web
-  or CLI. This is agentic commerce where the users already are.
+- **Innovation.** An autonomous payer inside a shared social channel, the surface
+  no rival holds (a `discord x402 arc` repo search returns nothing). Buyer-side
+  agents on Arc exist (Keryx is the sharp one), but they are single-user web or
+  CLI. NanoPay's spend-governance is per-user, so one agent serves a whole channel:
+  many people, separate USDC budgets each. This is agentic commerce where the users
+  already are, not another dashboard.
 
 ## Commands
 
@@ -144,7 +153,7 @@ Testnet, 20 USDC per address per 2h), or from another funded wallet.
 
 ## Tests
 
-`pytest` is green (31 tests) and `mypy --strict` is clean. Network calls are
+`pytest` is green (32 tests) and `mypy --strict` is clean. Network calls are
 mocked, so the suite is deterministic and offline. The on-chain settlements above
 were run separately against live Arc testnet.
 
