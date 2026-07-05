@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
-from ..payments.config import ANTHROPIC_API_KEY, ANTHROPIC_MODEL
+from . import llm
 from .tools import TOOL_CATALOG, ToolSpec, get_tool
 
 logger = logging.getLogger("nanopay.planner")
@@ -92,52 +92,17 @@ async def decide(
 
 
 # ============================================================================
-# Claude IO (monkeypatched in tests)
+# Model IO (monkeypatched in tests) — provider details live in llm.py
 # ============================================================================
-
-
-def _anthropic_tools(catalog: list[ToolSpec]) -> list[dict[str, Any]]:
-    tools: list[dict[str, Any]] = []
-    for t in catalog:
-        tools.append(
-            {
-                "name": t.name,
-                "description": f"{t.description} Costs {t.price_display} USDC per call.",
-                "input_schema": {
-                    "type": "object",
-                    "properties": {
-                        t.arg_name: {"type": "string", "description": t.arg_description}
-                    },
-                    "required": [t.arg_name],
-                },
-            }
-        )
-    tools.append(
-        {
-            "name": _RESPOND_DIRECTLY,
-            "description": "Answer the user directly for free, without buying any tool.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "reason": {"type": "string", "description": "Why no paid tool is needed."}
-                },
-                "required": ["reason"],
-            },
-        }
-    )
-    return tools
 
 
 async def _plan(
     prompt: str, budget_remaining_atomic: int, catalog: list[ToolSpec]
 ) -> dict[str, Any]:
-    """Ask Claude to pick one tool or respond directly. Returns {tool, args, reason}."""
-    if not ANTHROPIC_API_KEY:
+    """Ask the model to pick one tool or respond directly. Returns {tool, args, reason}."""
+    if not llm.available():
         # No brain available: answer for free rather than spend blindly.
         return {"tool": None, "reason": "AI planner unavailable; answering directly."}
-
-    from anthropic import AsyncAnthropic
-    from anthropic.types import ToolChoiceAnyParam, ToolParam
 
     budget = budget_remaining_atomic / 1_000_000
     system = (
@@ -150,62 +115,39 @@ async def _plan(
         "Pick exactly one option. Prefer the cheapest tool that does the job. "
         "Even when a tool would help, choose respond_directly if its price exceeds the budget left."
     )
-    client = AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
-    msg = await client.messages.create(
-        model=ANTHROPIC_MODEL,
-        max_tokens=400,
-        system=system,
-        tools=cast("list[ToolParam]", _anthropic_tools(catalog)),
-        tool_choice=cast("ToolChoiceAnyParam", {"type": "any"}),
-        messages=[{"role": "user", "content": prompt}],
-    )
-    for block in msg.content:
-        if block.type == "tool_use":
-            raw = block.input
-            args = raw if isinstance(raw, dict) else {}
-            resolved = _resolve_tool_name(block.name, catalog)
-            if resolved is None:
-                return {"tool": None, "reason": str(args.get("reason", ""))}
-            return {"tool": resolved, "args": args, "reason": f"Selected {resolved}."}
-    return {"tool": None, "reason": "Planner returned no tool; answering directly."}
+    result = await llm.plan_tools(system, prompt, catalog, _RESPOND_DIRECTLY)
+    raw_name = str(result.get("name") or "")
+    raw_args = result.get("args") or {}
+    args = raw_args if isinstance(raw_args, dict) else {}
+
+    if not raw_name:
+        text = str(result.get("text") or "").strip()
+        return {"tool": None, "reason": text or "No paid data needed; answering directly."}
+
+    resolved = _resolve_tool_name(raw_name, catalog)
+    if resolved is None:
+        return {"tool": None, "reason": str(args.get("reason", "")) or "Answering directly."}
+    return {"tool": resolved, "args": args, "reason": f"Selected {resolved}."}
 
 
 async def answer_free(prompt: str) -> str:
     """Agent answers from its own knowledge — free, no USDC spent."""
-    if not ANTHROPIC_API_KEY:
-        return "AI unavailable: ANTHROPIC_API_KEY not set."
-    from anthropic import AsyncAnthropic
-
-    client = AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
-    msg = await client.messages.create(
-        model=ANTHROPIC_MODEL,
-        max_tokens=600,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    parts = [b.text for b in msg.content if b.type == "text"]
-    return "\n".join(parts).strip() or "(no answer)"
+    if not llm.available():
+        return "AI unavailable: no LLM configured."
+    answer = await llm.chat(prompt, max_tokens=600)
+    return answer or "(no answer)"
 
 
 async def compose(prompt: str, tool_name: str, tool_result: str) -> str:
     """Compose a final answer from a paid tool's result. Free reasoning step."""
-    if not ANTHROPIC_API_KEY:
+    if not llm.available():
         return tool_result
-    from anthropic import AsyncAnthropic
-
-    client = AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
-    msg = await client.messages.create(
-        model=ANTHROPIC_MODEL,
+    answer = await llm.chat(
+        (
+            f"User asked: {prompt}\n\n"
+            f"You paid for the '{tool_name}' tool and it returned:\n{tool_result}\n\n"
+            "Write a short, direct answer to the user using this result."
+        ),
         max_tokens=600,
-        messages=[
-            {
-                "role": "user",
-                "content": (
-                    f"User asked: {prompt}\n\n"
-                    f"You paid for the '{tool_name}' tool and it returned:\n{tool_result}\n\n"
-                    "Write a short, direct answer to the user using this result."
-                ),
-            }
-        ],
     )
-    parts = [b.text for b in msg.content if b.type == "text"]
-    return "\n".join(parts).strip() or tool_result
+    return answer or tool_result

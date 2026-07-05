@@ -15,8 +15,6 @@ from collections.abc import Awaitable, Callable
 
 import httpx
 
-from ..payments.config import ANTHROPIC_API_KEY, ANTHROPIC_MODEL
-
 logger = logging.getLogger("nanopay.executor")
 
 Executor = Callable[[dict[str, str]], Awaitable[str]]
@@ -143,20 +141,13 @@ async def _fetch_weather(city: str) -> str:
 
 
 async def _ask_claude(prompt: str) -> str:
-    """Real answer from Claude (Anthropic)."""
-    if not ANTHROPIC_API_KEY:
-        return "AI unavailable: ANTHROPIC_API_KEY not set."
-    # Imported lazily so the package is optional for non-AI deployments.
-    from anthropic import AsyncAnthropic
+    """Real answer from the operator's model (Anthropic or an OpenAI-compatible API)."""
+    from ..agent import llm
 
-    client = AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
-    msg = await client.messages.create(
-        model=ANTHROPIC_MODEL,
-        max_tokens=600,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    parts = [block.text for block in msg.content if block.type == "text"]
-    return "\n".join(parts).strip() or "(no answer)"
+    if not llm.available():
+        return "AI unavailable: no LLM configured."
+    answer = await llm.chat(prompt, max_tokens=600)
+    return answer or "(no answer)"
 
 
 # ============================================================================

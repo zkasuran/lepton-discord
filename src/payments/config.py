@@ -54,6 +54,17 @@ DEFAULT_BUDGET_ATOMIC = int(os.getenv("DEFAULT_BUDGET_ATOMIC", "50000"))
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5")
 
+# OpenAI-compatible provider (a gateway or self-hosted endpoint that speaks the
+# OpenAI chat-completions protocol). When configured, the agent's reasoning runs
+# here instead of Anthropic. OPENAI_BASE_URL should include the /v1 suffix.
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "mimo-v2.5-pro")
+
+# Force a provider: "openai" | "anthropic" | "" (auto: openai if configured, else
+# anthropic). The agent's reasoning is free either way; USDC only pays for tools.
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "")
+
 # API server
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
 API_PORT = int(os.getenv("API_PORT", "8402"))
