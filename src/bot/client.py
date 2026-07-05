@@ -144,7 +144,7 @@ def _result_embed(command_name: str, result: str, tx: str) -> discord.Embed:
     if tx:
         embed.add_field(
             name="Arc tx",
-            value=f"[{tx[:16]}...](https://explorer.testnet.arc.network/tx/{tx})",
+            value=f"[{tx[:16]}...](https://testnet.arcscan.app/tx/{tx})",
             inline=False,
         )
     embed.set_footer(text="Paid via x402 on Arc Testnet • NanoPay for Discord")

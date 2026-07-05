@@ -121,7 +121,7 @@ async function switchToArc() {{
           chainName: "Arc Testnet",
           nativeCurrency: {{ name: "USDC", symbol: "USDC", decimals: 6 }},
           rpcUrls: ["https://rpc.testnet.arc.network"],
-          blockExplorerUrls: ["https://explorer.testnet.arc.network"],
+          blockExplorerUrls: ["https://testnet.arcscan.app"],
         }}],
       }});
     }}
