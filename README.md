@@ -1,14 +1,40 @@
 # NanoPay
 
-The Discord agent that pays its own way on Arc.
+**The Discord agent that pays its own way on Arc.**
 
 You ask it something. It decides whether it needs a paid service, pays for that
 service in USDC over x402 on Arc from its own wallet, settles on-chain in under a
-second, and hands you the answer plus the receipt. No MetaMask, no human in the
-signing loop, no subscription.
+second, and hands you the answer plus the receipt. No wallet, no signing, no human
+in the loop, no subscription.
 
-Built for the Lepton Agents Hackathon (Canteen x Circle), RFB-1: Autonomous
-Paying Agents.
+Built for the Lepton Agents Hackathon (Canteen x Circle), RFB-1: Autonomous Paying
+Agents.
+
+[![live site](https://img.shields.io/badge/live-zkasuran.github.io%2Flepton--discord-0f8a56)](https://zkasuran.github.io/lepton-discord/)
+[![settles on Arc](https://img.shields.io/badge/settles_on-Arc_testnet-1f1f1f)](https://docs.arc.network)
+[![payments x402](https://img.shields.io/badge/payments-x402_%2B_EIP--3009-2775CA)](https://github.com/circlefin/arc-nanopayments)
+[![tests](https://img.shields.io/badge/tests-53_passing-0f8a56)](#tests)
+
+## Links
+
+- **Landing page (live):** https://zkasuran.github.io/lepton-discord/
+- **Add NanoPay to your Discord** (the bot runs 24/7, try `/ask` anytime):
+  https://discord.com/oauth2/authorize?client_id=1517400111699726488&permissions=18432&scope=bot+applications.commands
+- **Source:** https://github.com/zkasuran/lepton-discord
+
+## Try it right now
+
+The bot is deployed and always on, so you do not need to run anything:
+
+1. Add it to a server with the invite link above, or join a server that has it.
+2. Run `/ask what's BTC doing right now, one line`. The agent decides it needs a
+   live price, pays a sub-cent USDC toll on Arc, and answers with a clickable
+   receipt.
+3. Run `/ask explain the TCP handshake` and watch it answer for free, spending $0.
+4. Run `/budget` to see your per-user USDC budget.
+
+The landing page shows the same loop with an animated demo, a live "Ask the agent"
+box, the real on-chain settlements below, and a judges FAQ.
 
 ## The gap this fills
 
@@ -23,18 +49,18 @@ channel, many distinct users each spending under their own USDC budget.
 
 ```
 Discord user:  /ask "what's BTC doing and is it a good week to care?"
-        │
-        ▼
-  NanoPay agent (Claude)  ── decides: "I need a live price, that costs $0.001"
-        │                         checks budget, picks the cheapest tool
-        ▼
-  x402 service on Arc  ◄── 402 challenge ── agent signs EIP-3009 (USDC, no gas)
-        │                  facilitator settles on Arc in <500ms, pays the gas
-        ▼
-  real CoinGecko price ──► agent composes the answer
-        │
-        ▼
-  Discord:  answer + "paid $0.001 • budget left $0.049 • Arc receipt 0xab04…"
+        |
+        v
+  NanoPay agent  ── decides: "I need a live price, that costs $0.001"
+        |                     checks budget, picks the cheapest tool
+        v
+  x402 service on Arc  <── 402 challenge ── agent signs EIP-3009 (USDC, no gas)
+        |                   facilitator settles on Arc in <500ms, pays the gas
+        v
+  real CoinGecko price ──> agent composes the answer
+        |
+        v
+  Discord:  answer + "paid $0.001 · budget left $0.049 · Arc receipt 0xad1f…"
 ```
 
 The agent's reasoning is free (it runs on the operator's model). It spends USDC
@@ -43,15 +69,16 @@ only on the external tools it decides are worth buying.
 ## Live proof (Arc testnet, verified on-chain)
 
 Two distinct wallets, real USDC moving between them, every settlement confirmed
-(status 1). These are a fresh in-window run (2026-07-04). Reproduce with
-`scripts/e2e_demo.py` and `scripts/agent_demo.py`.
+(status 1). Reproduce with `scripts/e2e_demo.py` and `scripts/agent_demo.py`, or
+just run `/ask` in Discord.
 
 | What | Tx | Result |
 |------|----|--------|
-| `/ping` (smoke) | [`48d60980…`](https://testnet.arcscan.app/tx/48d60980cb6a5da0ca7350f234b34250ec2001ad594a1ca4ceb232aaf1a039a7) | settled, −$0.001 |
+| `/ask` full loop (agent decides, pays, composes) | [`70ca2d2a…`](https://testnet.arcscan.app/tx/70ca2d2aa7e6ff894484d0f6a4f910c4f1e89a3685bb5da30374e42bf75edd2f) | agent chose to pay CoinGecko, answered `BTC $62,486 +1.83%` |
+| `/ask` on the OpenAI-compatible model | [`2dd13f99…`](https://testnet.arcscan.app/tx/2dd13f99b06cdf9a43a71a618eb31bde76380541f06f662ad6cab156db6343b0) | agent chose to pay, answered `BTC $62,703 +0.09%` |
 | `/price BTC` (real CoinGecko) | [`ad1f0d04…`](https://testnet.arcscan.app/tx/ad1f0d044f28535353b9d981293ad12e2f02da583d42374630cce3e6a3057c67) | `BTC = $62,498 (+1.85% 24h)` |
 | `/weather Tokyo` (real Open-Meteo) | [`59ab0652…`](https://testnet.arcscan.app/tx/59ab065209b8f5d4c7cf871aaa4528ab4416d23259ca70f478bbe11abe3c13af) | `Tokyo, JP: 23.3°C, partly cloudy` |
-| `/ask` full loop (agent decides → pays → composes) | [`70ca2d2a…`](https://testnet.arcscan.app/tx/70ca2d2aa7e6ff894484d0f6a4f910c4f1e89a3685bb5da30374e42bf75edd2f) | agent chose to pay CoinGecko, answered `BTC $62,486 +1.83%` |
+| `/ping` (smoke) | [`48d60980…`](https://testnet.arcscan.app/tx/48d60980cb6a5da0ca7350f234b34250ec2001ad594a1ca4ceb232aaf1a039a7) | settled, −$0.001 |
 
 - Agent (payer): `0x6a1b4267921f41f9D5D1FACF998Da9BB930701c4`
 - Service (payTo): `0xDB6c6340342e71A63cD11Ebac2185204b7777777`
@@ -70,28 +97,23 @@ enforced in code, not by the model).
 ## How it maps to the judging
 
 This is RFB-1, Autonomous Paying Agents: an agent that discovers, evaluates and
-pays for paywalled APIs on a budget, without overspending. The RFB's own example
-is "BudgetBot, $10/day budget across APIs". That is what this is, on Discord.
+pays for paywalled APIs on a budget, without overspending.
 
 - **Agentic sophistication.** The agent decides. Given a free-form request it
   reasons over a priced tool catalog, picks the single cheapest tool that helps
   (or none), and refuses to spend past a budget. It is not a fixed
-  `/price -> CoinGecko` script. See `/ask` declining an over-budget call. The
-  budget is enforced in code after the model picks, so the model cannot overspend.
-- **Traction.** Mapped to RFB-1's own metrics. Total autonomous payments: every
-  `/ask` that needs data is one. Average transaction size: $0.001, sub-cent, the
-  stated target. Budget efficiency: over-budget calls are declined, not paid.
-  Cost per task: one sub-cent settlement per answered request. Every call is a
-  real on-chain USDC settlement on Arc (table above), provable not claimed.
+  `/price -> CoinGecko` script. The budget is enforced in code after the model
+  picks, so the model cannot overspend.
+- **Traction.** Every `/ask` that needs data is a real sub-cent USDC settlement on
+  Arc, provable not claimed. The bot is live 24/7 so usage is real, and the
+  numbers are computed from the payment store by `scripts/traction_report.py`.
 - **Circle tooling.** x402 HTTP 402 exact scheme, EIP-3009 USDC on Arc, an
-  embedded facilitator that settles in-process, USDC-as-gas. Optional Circle
+  embedded facilitator that settles in-process, USDC-as-gas. An optional Circle
   developer-controlled wallet path is wired in config.
 - **Innovation.** An autonomous payer inside a shared social channel, the surface
-  no rival holds (a `discord x402 arc` repo search returns nothing). Buyer-side
-  agents on Arc exist (Keryx is the sharp one), but they are single-user web or
-  CLI. NanoPay's spend-governance is per-user, so one agent serves a whole channel:
-  many people, separate USDC budgets each. This is agentic commerce where the users
-  already are, not another dashboard.
+  no rival holds. Buyer-side agents on Arc exist (Keryx is the sharp one), but they
+  are single-user web or CLI. NanoPay's spend governance is per-user, so one agent
+  serves a whole channel: many people, separate USDC budgets each.
 
 ## Commands
 
@@ -101,7 +123,7 @@ is "BudgetBot, $10/day budget across APIs". That is what this is, on Discord.
 | `/budget` | Show your remaining USDC spend budget | free |
 | `/price <symbol>` | Direct live price (CoinGecko) | $0.001 |
 | `/weather <city>` | Direct live weather (Open-Meteo) | $0.001 |
-| `/gpt <prompt>` | Direct premium answer (Claude, server-side) | $0.01 |
+| `/gpt <prompt>` | Direct premium answer (the model, server-side) | $0.01 |
 | `/ping` | x402 smoke test | $0.001 |
 | `/nanopay-info` | About the bot | free |
 
@@ -110,64 +132,99 @@ is "BudgetBot, $10/day budget across APIs". That is what this is, on Discord.
 Hexagonal: domain models hold no IO, ports define the seams, adapters do the work.
 
 - `src/agent/`: the brain. `planner.decide()` chooses a tool and enforces the
-  budget in code (not left to the model); `tools.py` is the priced catalog.
+  budget in code (not left to the model); `tools.py` is the priced catalog;
+  `llm.py` is the model provider layer.
 - `src/bot/`: the Discord client and `payer.py`, the x402 client that signs
   EIP-3009 from the agent wallet.
-- `src/api/`: FastAPI resource server. `/execute/{id}` is the x402-gated
-  endpoint; `executor.py` runs the real services (CoinGecko, Open-Meteo, Claude).
-- `src/payments/`: config, the embedded x402 facilitator, the SQLite store.
+- `src/api/`: FastAPI resource server. `/execute/{id}` is the x402-gated endpoint;
+  `executor.py` runs the real services; `/demo/ask` is the public browser demo.
+- `src/payments/`: config, the embedded x402 facilitator, the SQLite store, and
+  the traction summary.
 
 Two wallets, on purpose: the agent (payer) is separate from the service (payTo and
 facilitator), so USDC actually moves between parties instead of round-tripping to
 itself.
 
 Stack: `x402==2.13` (exact EVM scheme), `discord.py`, `fastapi`, `eth-account`,
-`anthropic`, `aiosqlite`, Arc testnet (`eip155:5042002`), USDC system contract
+`aiosqlite`, Arc testnet (`eip155:5042002`), USDC system contract
 `0x3600000000000000000000000000000000000000` (verified `name()="USDC"`,
 `version()="2"`, the values the EIP-712 domain must match or settlement reverts).
+
+## The model provider
+
+The agent's reasoning runs on Anthropic **or** any OpenAI-compatible endpoint,
+selected by env (`src/agent/llm.py`). Set `OPENAI_BASE_URL` + `OPENAI_API_KEY` for
+an OpenAI-compatible model, or `ANTHROPIC_API_KEY` for Claude, or force one with
+`LLM_PROVIDER`. Tool-use maps to the same decide-or-answer-free decision either
+way. Reasoning is free; USDC only ever pays for the external tools.
+
+## Public browser demo
+
+`POST /demo/ask` runs the real agent loop from a browser and returns the decision,
+answer, spend and a fresh Arc tx, so the landing page can settle a real payment per
+ask. It is rate-limited per IP with a global spend cap so public traffic can never
+drain the agent wallet, and CORS is opened for the static site.
 
 ## Setup
 
 ```bash
 make dev-install            # uv venv + deps
-cp .env.example .env        # then fill in the values below
+cp .env.example .env        # then fill in the values
 make lint                   # ruff + ruff format + mypy --strict
 make test                   # pytest
 ```
 
-Required env: `DISCORD_BOT_TOKEN`, `ANTHROPIC_API_KEY`, an `AGENT_PRIVATE_KEY`
-(the payer, holds USDC), a `SELLER_WALLET_ADDRESS` and `FACILITATOR_PRIVATE_KEY`
-(the service, receives USDC and relays settlement). See `.env.example`.
+Required env: `DISCORD_BOT_TOKEN`, a model provider (`OPENAI_*` or
+`ANTHROPIC_API_KEY`), an `AGENT_PRIVATE_KEY` (the payer, holds USDC), a
+`SELLER_WALLET_ADDRESS` and a facilitator key (the service, receives USDC and
+relays settlement). Optional `GUILD_ID` syncs slash commands to your server
+instantly. See `.env.example`.
 
 ## Run
 
 ```bash
 make api                                  # start the x402 resource server
 .venv/bin/python scripts/fund_agent.py    # generate + fund the agent wallet
-.venv/bin/python scripts/e2e_demo.py price BTC   # one real paid call, end to end
+.venv/bin/python scripts/agent_demo.py "price of BTC?"   # one real agentic call
 make bot                                  # start the Discord bot
 ```
 
 Fund the agent wallet with testnet USDC from https://faucet.circle.com (Arc
-Testnet, 20 USDC per address per 2h), or from another funded wallet.
+Testnet), or from another funded wallet.
+
+If a slash command does not appear, force a guild sync (instant) without a
+restart: `.venv/bin/python scripts/sync_commands.py <guild_id>`.
+
+## Deploy (always on)
+
+The bot dials out to Discord, so it needs no inbound ports. Run the API and the
+bot as services so they survive reboots. The repo includes systemd-ready entry
+points (`run_api.py`, `run_bot.py`); point two `systemd` units at
+`/.venv/bin/python run_api.py` and `run_bot.py` with `Restart=on-failure`. The
+production instance runs exactly this, which is why the bot is live 24/7.
 
 ## Tests
 
-`pytest` is green (32 tests) and `mypy --strict` is clean. Network calls are
-mocked, so the suite is deterministic and offline. The on-chain settlements above
-were run separately against live Arc testnet.
+`pytest` is green (53 tests) and `mypy --strict` is clean. Network and model calls
+are mocked, so the suite is deterministic and offline. The on-chain settlements
+above were run separately against live Arc testnet.
+
+## Roadmap
+
+An open agent-to-agent marketplace: any member lists a priced service, an admin
+verifies it is legit, and the agent can then discover and pay for it. NanoPay
+becomes both the buyer and the marketplace, per channel.
 
 ## Security
 
-Testnet only. Never commit a real key. `.env` is gitignored; `.env.example`
-ships placeholders. The agent wallet in the proof table is a throwaway testnet
-wallet.
+Testnet only. Never commit a real key. `.env` is gitignored; `.env.example` ships
+placeholders. The agent wallet in the proof table is a throwaway testnet wallet.
 
 ## AI disclosure
 
-This project was built with substantial help from Claude (Anthropic), which
-drafted the agent decision layer, the executors, the wallet-split refactor and
-this README. Every change was verified locally before commit: `ruff`,
-`ruff format --check`, `mypy --strict` and `pytest` all pass, and the payment
-loop was run end-to-end on Arc testnet with the transactions linked above. Design
-choices are the author's and are documented here for review.
+This project was built with substantial help from Claude (Anthropic), which drafted
+the agent decision layer, the model provider, the executors, the deploy and this
+README. Every change was verified before commit: `ruff`, `ruff format --check`,
+`mypy --strict` and `pytest` all pass, and the payment loop was run end-to-end on
+Arc testnet with the transactions linked above. The author reviewed the work and
+owns the design choices.
