@@ -28,9 +28,18 @@ _HTTP_TIMEOUT = 30.0
 
 
 def provider() -> str:
-    """Which backend to use: explicit override, else auto-detect, else 'none'."""
-    if config.LLM_PROVIDER:
-        return config.LLM_PROVIDER
+    """Which backend to use: a validated explicit override, else auto-detect.
+
+    An explicit LLM_PROVIDER only wins if that provider's credentials are present,
+    so a forced-but-misconfigured value (e.g. openai with no base URL) resolves to
+    'none' and callers degrade cleanly instead of building a broken request. An
+    unrecognised value falls through to auto-detect rather than being trusted.
+    """
+    forced = config.LLM_PROVIDER.strip().lower()
+    if forced == "openai":
+        return "openai" if (config.OPENAI_API_KEY and config.OPENAI_BASE_URL) else "none"
+    if forced == "anthropic":
+        return "anthropic" if config.ANTHROPIC_API_KEY else "none"
     if config.OPENAI_API_KEY and config.OPENAI_BASE_URL:
         return "openai"
     if config.ANTHROPIC_API_KEY:

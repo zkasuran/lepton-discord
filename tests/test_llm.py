@@ -38,9 +38,37 @@ def test_provider_none_when_unconfigured(monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_explicit_provider_override_wins(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(config, "LLM_PROVIDER", "anthropic")
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "k")
     monkeypatch.setattr(config, "OPENAI_API_KEY", "x")
     monkeypatch.setattr(config, "OPENAI_BASE_URL", "https://y/v1")
     assert llm.provider() == "anthropic"
+
+
+def test_forced_provider_without_credentials_is_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    # LLM_PROVIDER=openai but no base URL must not pass available() then crash.
+    monkeypatch.setattr(config, "LLM_PROVIDER", "openai")
+    monkeypatch.setattr(config, "OPENAI_API_KEY", "x")
+    monkeypatch.setattr(config, "OPENAI_BASE_URL", "")
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "")
+    assert llm.provider() == "none"
+    assert llm.available() is False
+
+
+def test_forced_provider_is_case_insensitive(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(config, "LLM_PROVIDER", "OpenAI")
+    monkeypatch.setattr(config, "OPENAI_API_KEY", "x")
+    monkeypatch.setattr(config, "OPENAI_BASE_URL", "https://y/v1")
+    assert llm.provider() == "openai"
+
+
+def test_unknown_forced_provider_falls_back_to_autodetect(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(config, "LLM_PROVIDER", "gpt5")  # not a real provider
+    monkeypatch.setattr(config, "OPENAI_API_KEY", "x")
+    monkeypatch.setattr(config, "OPENAI_BASE_URL", "https://y/v1")
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "")
+    assert llm.provider() == "openai"
 
 
 async def test_openai_chat_returns_trimmed_content(

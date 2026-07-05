@@ -223,11 +223,27 @@ async def _handle_agent_request(interaction: discord.Interaction, prompt: str) -
         return
     remaining = budget["remaining_atomic"]
 
-    decision = await planner.decide(prompt, remaining)
+    try:
+        decision = await planner.decide(prompt, remaining)
+    except Exception as exc:
+        logger.warning("agent decide failed: %s", exc)
+        await interaction.followup.send(
+            "The agent could not reach its model just now. Try again in a moment.",
+            ephemeral=True,
+        )
+        return
 
     # No spend needed — the agent answers for free.
     if decision.action == "answer_free":
-        answer = await planner.answer_free(prompt)
+        try:
+            answer = await planner.answer_free(prompt)
+        except Exception as exc:
+            logger.warning("agent answer_free failed: %s", exc)
+            await interaction.followup.send(
+                "The agent could not reach its model just now. Try again in a moment.",
+                ephemeral=True,
+            )
+            return
         embed = discord.Embed(title="Agent answer (free)", description=answer, color=0x60A5FA)
         embed.add_field(name="Decision", value=decision.reason, inline=False)
         embed.add_field(name="Spent", value="$0.0000", inline=True)
@@ -269,7 +285,13 @@ async def _handle_agent_request(interaction: discord.Interaction, prompt: str) -
 
     tx = result_data.get("tx_hash", "")
     tool_result = result_data.get("result", "(no result)")
-    final = await planner.compose(prompt, tool.name, tool_result)
+    # The payment already settled, so never lose the paid result: if composing the
+    # answer fails, fall back to the raw tool output the user paid for.
+    try:
+        final = await planner.compose(prompt, tool.name, tool_result)
+    except Exception as exc:
+        logger.warning("agent compose failed, using raw tool result: %s", exc)
+        final = tool_result
 
     spent_after = budget["spent_atomic"] + tool.price_atomic
     left_after = max(0, budget["limit_atomic"] - spent_after)
