@@ -150,7 +150,8 @@ def main() -> None:
         checks = _verify_chain(s.settled_tx) if args.verify_chain else {}
         for tx in s.settled_tx:
             suffix = f"   [{checks[tx]}]" if tx in checks else ""
-            print(f"  {ARCSCAN}{tx}{suffix}")
+            hx = tx if tx.startswith("0x") else f"0x{tx}"
+            print(f"  {ARCSCAN}{hx}{suffix}")
     print("\nPaste-ready Traction line:")
     print(_form_line(s))
 

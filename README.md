@@ -74,11 +74,11 @@ just run `/ask` in Discord.
 
 | What | Tx | Result |
 |------|----|--------|
-| `/ask` full loop (agent decides, pays, composes) | [`70ca2d2a…`](https://testnet.arcscan.app/tx/70ca2d2aa7e6ff894484d0f6a4f910c4f1e89a3685bb5da30374e42bf75edd2f) | agent chose to pay CoinGecko, answered `BTC $62,486 +1.83%` |
-| `/ask` on the OpenAI-compatible model | [`2dd13f99…`](https://testnet.arcscan.app/tx/2dd13f99b06cdf9a43a71a618eb31bde76380541f06f662ad6cab156db6343b0) | agent chose to pay, answered `BTC $62,703 +0.09%` |
-| `/price BTC` (real CoinGecko) | [`ad1f0d04…`](https://testnet.arcscan.app/tx/ad1f0d044f28535353b9d981293ad12e2f02da583d42374630cce3e6a3057c67) | `BTC = $62,498 (+1.85% 24h)` |
-| `/weather Tokyo` (real Open-Meteo) | [`59ab0652…`](https://testnet.arcscan.app/tx/59ab065209b8f5d4c7cf871aaa4528ab4416d23259ca70f478bbe11abe3c13af) | `Tokyo, JP: 23.3°C, partly cloudy` |
-| `/ping` (smoke) | [`48d60980…`](https://testnet.arcscan.app/tx/48d60980cb6a5da0ca7350f234b34250ec2001ad594a1ca4ceb232aaf1a039a7) | settled, −$0.001 |
+| `/ask` full loop (agent decides, pays, composes) | [`70ca2d2a…`](https://testnet.arcscan.app/tx/0x70ca2d2aa7e6ff894484d0f6a4f910c4f1e89a3685bb5da30374e42bf75edd2f) | agent chose to pay CoinGecko, answered `BTC $62,486 +1.83%` |
+| `/ask` on the OpenAI-compatible model | [`2dd13f99…`](https://testnet.arcscan.app/tx/0x2dd13f99b06cdf9a43a71a618eb31bde76380541f06f662ad6cab156db6343b0) | agent chose to pay, answered `BTC $62,703 +0.09%` |
+| `/price BTC` (real CoinGecko) | [`ad1f0d04…`](https://testnet.arcscan.app/tx/0xad1f0d044f28535353b9d981293ad12e2f02da583d42374630cce3e6a3057c67) | `BTC = $62,498 (+1.85% 24h)` |
+| `/weather Tokyo` (real Open-Meteo) | [`59ab0652…`](https://testnet.arcscan.app/tx/0x59ab065209b8f5d4c7cf871aaa4528ab4416d23259ca70f478bbe11abe3c13af) | `Tokyo, JP: 23.3°C, partly cloudy` |
+| `/ping` (smoke) | [`48d60980…`](https://testnet.arcscan.app/tx/0x48d60980cb6a5da0ca7350f234b34250ec2001ad594a1ca4ceb232aaf1a039a7) | settled, −$0.001 |
 
 - Agent (payer): `0x6a1b4267921f41f9D5D1FACF998Da9BB930701c4`
 - Service (payTo): `0xDB6c6340342e71A63cD11Ebac2185204b7777777`

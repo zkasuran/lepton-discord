@@ -209,6 +209,11 @@ async def execute_paid_command(payment_id: str, request: Request) -> Response:
         raise HTTPException(402, f"Payment settlement failed: {settle_result.error_reason}")
 
     tx_hash = settle_result.transaction or ""
+    # Normalize to a 0x-prefixed hash so every downstream link (bot receipt, the
+    # /demo response, the traction report) resolves on the block explorer, which
+    # rejects a bare hash.
+    if tx_hash and not tx_hash.startswith("0x"):
+        tx_hash = "0x" + tx_hash
     payer = settle_result.payer or ""
 
     try:
