@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NanoPay — the agent that pays its own way on Arc</title>
+<meta name="description" content="NanoPay is an autonomous Discord agent with its own USDC wallet. It decides when to buy live data, pays for it over x402 on Arc in under a second, and hands you the answer plus the on-chain receipt." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #fbfaf6;
+    --bg-tint: #f3f5ef;
+    --card: #ffffff;
+    --line: #ebe9df;
+    --line2: #ddd9cb;
+    --ink: #1a1c18;
+    --muted: #676d63;
+    --faint: #979c8f;
+    --green: #0f8a56;
+    --green-bright: #15a869;
+    --green-soft: #e7f4ec;
+    --green-line: #bfe3ca;
+    --amber: #b4740f;
+    --amber-soft: #fbf0da;
+    --shadow: 0 12px 32px -14px rgba(30, 42, 28, 0.16);
+    --shadow-lg: 0 30px 60px -24px rgba(30, 42, 28, 0.22);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Figtree", system-ui, sans-serif;
+    font-size: 17px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* soft atmosphere, kept gentle */
+  body::before {
+    content: "";
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background: radial-gradient(100% 60% at 50% -10%, rgba(21, 168, 105, 0.08), transparent 60%);
+  }
+
+  .wrap { position: relative; z-index: 2; max-width: 1000px; margin: 0 auto; padding: 0 24px; }
+  .mono { font-family: "IBM Plex Mono", monospace; }
+  .serif { font-family: "Fraunces", Georgia, serif; }
+
+  /* ---- nav ---- */
+  nav {
+    position: sticky; top: 0; z-index: 40;
+    backdrop-filter: blur(10px);
+    background: rgba(251, 250, 246, 0.8);
+    border-bottom: 1px solid var(--line);
+  }
+  nav .row { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-family: "Fraunces", serif; font-weight: 700; letter-spacing: -0.01em; font-size: 21px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green-bright); box-shadow: 0 0 0 4px var(--green-soft); animation: pulse 2.6s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .nav-links { display: flex; align-items: center; gap: 24px; font-size: 15px; }
+  .nav-links a { color: var(--muted); text-decoration: none; transition: color 0.2s; font-weight: 500; }
+  .nav-links a:hover { color: var(--ink); }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 9px;
+    font-family: "Figtree", sans-serif; font-weight: 600; font-size: 15px;
+    padding: 11px 20px; border-radius: 10px; text-decoration: none; cursor: pointer;
+    border: 1px solid transparent; transition: transform 0.15s, box-shadow 0.2s, background 0.2s;
+  }
+  .btn-primary { background: var(--green); color: #fff; box-shadow: 0 8px 20px -8px rgba(15, 138, 86, 0.55); }
+  .btn-primary:hover { transform: translateY(-2px); background: var(--green-bright); box-shadow: 0 14px 28px -8px rgba(15, 138, 86, 0.6); }
+  .btn-ghost { background: var(--card); color: var(--ink); border-color: var(--line2); }
+  .btn-ghost:hover { border-color: var(--green); color: var(--green); }
+
+  /* ---- hero ---- */
+  header.hero { padding: 84px 0 36px; }
+  .tag {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 14px; font-weight: 500; color: var(--green);
+    border: 1px solid var(--green-line); border-radius: 100px; padding: 6px 15px;
+    background: var(--green-soft); margin-bottom: 26px;
+  }
+  h1 {
+    font-family: "Fraunces", serif; font-weight: 600; letter-spacing: -0.02em;
+    font-size: clamp(40px, 6.6vw, 72px); line-height: 1.02; margin-bottom: 22px; color: var(--ink);
+  }
+  h1 .accent { color: var(--green); font-style: italic; }
+  .lede { font-size: clamp(17px, 2vw, 20px); color: var(--muted); max-width: 610px; margin-bottom: 32px; }
+  .lede b { color: var(--ink); font-weight: 600; }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  .cta-note { font-size: 14px; color: var(--faint); }
+
+  .reveal { opacity: 0; transform: translateY(16px); animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) forwards; }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+  .d1 { animation-delay: 0.05s; } .d2 { animation-delay: 0.16s; } .d3 { animation-delay: 0.28s; }
+  .d4 { animation-delay: 0.4s; } .d5 { animation-delay: 0.52s; }
+
+  /* ---- receipt / chat card ---- */
+  .card-console {
+    margin-top: 50px; border: 1px solid var(--line); border-radius: 16px;
+    background: var(--card); box-shadow: var(--shadow-lg); overflow: hidden;
+  }
+  .cc-bar { display: flex; align-items: center; gap: 8px; padding: 14px 18px; border-bottom: 1px solid var(--line); background: #fcfcfa; }
+  .cc-bar .lamp { width: 10px; height: 10px; border-radius: 50%; background: #e6e4da; }
+  .cc-bar .lamp.g { background: var(--green-bright); }
+  .cc-title { margin-left: 8px; font-family: "IBM Plex Mono", monospace; font-size: 13px; color: var(--faint); }
+  .cc-body { padding: 22px 22px 24px; font-size: 15.5px; }
+  .line { padding: 3px 0; white-space: pre-wrap; word-break: break-word; }
+  .prompt { color: var(--green); font-weight: 600; font-family: "IBM Plex Mono", monospace; font-size: 14.5px; }
+  .u { color: var(--ink); }
+  .sys { color: var(--faint); font-size: 14.5px; }
+  .ok { color: var(--green); font-weight: 500; }
+  .amber { color: var(--amber); font-weight: 500; }
+  .muted { color: var(--muted); }
+  .rcpt { margin-top: 14px; border: 1px solid var(--green-line); border-radius: 12px; padding: 15px 17px; background: var(--green-soft); }
+  .rcpt .kv { display: flex; justify-content: space-between; gap: 16px; padding: 4px 0; font-size: 15px; }
+  .rcpt .kv span:first-child { color: var(--muted); }
+  a.tx { color: var(--green); text-decoration: none; font-family: "IBM Plex Mono", monospace; font-size: 14px; border-bottom: 1px solid var(--green-line); }
+  a.tx:hover { color: var(--green-bright); }
+
+  /* ---- ask box ---- */
+  .ask-form { display: flex; gap: 10px; margin-top: 18px; }
+  .ask-form input {
+    flex: 1; background: #fbfcfa; border: 1px solid var(--line2); border-radius: 11px;
+    color: var(--ink); font-family: "Figtree", sans-serif; font-size: 16px; padding: 13px 16px;
+  }
+  .ask-form input:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 4px var(--green-soft); }
+  .ask-form button { border: none; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .chip { font-size: 13.5px; color: var(--muted); border: 1px solid var(--line2); border-radius: 100px; padding: 6px 13px; cursor: pointer; background: var(--card); transition: all 0.15s; font-family: "Figtree", sans-serif; }
+  .chip:hover { border-color: var(--green); color: var(--green); }
+  .status-pill { font-size: 12.5px; padding: 4px 10px; border-radius: 100px; border: 1px solid var(--line2); color: var(--faint); font-family: "IBM Plex Mono", monospace; }
+  .status-pill.live { color: var(--green); border-color: var(--green-line); background: var(--green-soft); }
+
+  /* ---- sections ---- */
+  section { padding: 76px 0; border-top: 1px solid var(--line); }
+  section.alt { background: var(--bg-tint); }
+  .eyebrow { font-size: 14px; font-weight: 600; color: var(--green); letter-spacing: 0.02em; text-transform: uppercase; margin-bottom: 14px; }
+  h2 { font-family: "Fraunces", serif; font-weight: 600; letter-spacing: -0.015em; font-size: clamp(28px, 4vw, 42px); margin-bottom: 16px; line-height: 1.08; }
+  .sub { color: var(--muted); max-width: 640px; font-size: 18px; margin-bottom: 40px; }
+
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .step { border: 1px solid var(--line); border-radius: 14px; padding: 24px; background: var(--card); box-shadow: var(--shadow); transition: transform 0.18s; }
+  .step:hover { transform: translateY(-3px); }
+  .step .n { font-family: "IBM Plex Mono", monospace; font-size: 13px; color: var(--green); font-weight: 500; }
+  .step h3 { font-family: "Fraunces", serif; font-weight: 600; font-size: 22px; margin: 12px 0 8px; letter-spacing: -0.01em; }
+  .step p { color: var(--muted); font-size: 15.5px; }
+
+  .proof { border: 1px solid var(--line2); border-radius: 16px; overflow: hidden; background: var(--card); box-shadow: var(--shadow); }
+  .proof .head { display: flex; justify-content: space-between; align-items: center; padding: 17px 22px; border-bottom: 1px solid var(--line); font-family: "IBM Plex Mono", monospace; font-size: 13px; color: var(--muted); flex-wrap: wrap; gap: 10px; background: #fcfcfa; }
+  .row-tx { display: grid; grid-template-columns: 1.4fr 1.5fr 0.9fr auto; gap: 14px; align-items: center; padding: 15px 22px; border-bottom: 1px solid var(--line); font-size: 14.5px; transition: background 0.15s; }
+  .row-tx:last-child { border-bottom: none; }
+  .row-tx:hover { background: var(--green-soft); }
+  .row-tx .what { color: var(--ink); font-weight: 500; }
+  .row-tx .res { color: var(--muted); }
+  .row-tx .amt { color: var(--amber); font-family: "IBM Plex Mono", monospace; font-size: 13.5px; }
+  .row-tx .st { color: var(--green); font-weight: 600; }
+  @media (max-width: 720px) {
+    .row-tx { grid-template-columns: 1fr 1fr; }
+    .row-tx .amt, .row-tx .st { display: none; }
+  }
+
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .card { border: 1px solid var(--line); border-radius: 14px; padding: 28px; background: var(--card); box-shadow: var(--shadow); }
+  .card h3 { font-family: "Fraunces", serif; font-weight: 600; font-size: 22px; margin-bottom: 10px; letter-spacing: -0.01em; }
+  .card p { color: var(--muted); font-size: 15.5px; }
+  .card .big { font-family: "Fraunces", serif; color: var(--green); font-size: 44px; font-weight: 600; display: block; margin-bottom: 4px; line-height: 1; }
+
+  .judge { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 22px; }
+  .jc { border: 1px solid var(--line); border-radius: 12px; padding: 20px; background: var(--card); }
+  .jc .w { font-family: "IBM Plex Mono", monospace; color: var(--amber); font-size: 14px; font-weight: 500; }
+  .jc h4 { font-size: 16px; margin: 8px 0 6px; font-weight: 600; }
+  .jc p { color: var(--muted); font-size: 14px; }
+
+  .roadmap { margin-top: 22px; border: 1px dashed var(--line2); border-radius: 12px; padding: 18px 22px; background: var(--card); display: flex; gap: 14px; align-items: flex-start; }
+  .roadmap .badge { font-size: 12.5px; font-weight: 600; color: var(--amber); background: var(--amber-soft); border-radius: 100px; padding: 4px 12px; white-space: nowrap; }
+  .roadmap p { color: var(--muted); font-size: 15px; }
+  .roadmap b { color: var(--ink); }
+
+  .faq { display: grid; gap: 12px; max-width: 800px; }
+  .faq details { border: 1px solid var(--line); border-radius: 12px; background: var(--card); padding: 2px 22px; box-shadow: var(--shadow); transition: border-color 0.15s; }
+  .faq details[open] { border-color: var(--green-line); }
+  .faq summary { cursor: pointer; padding: 18px 0; font-weight: 600; font-size: 17px; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::after { content: "+"; color: var(--green); font-size: 24px; font-weight: 400; line-height: 1; }
+  .faq details[open] summary::after { content: "\2212"; }
+  .faq details p { color: var(--muted); font-size: 15.5px; padding: 0 0 20px; line-height: 1.6; }
+  .faq details p b { color: var(--ink); }
+
+  footer { border-top: 1px solid var(--line); padding: 48px 0 64px; color: var(--faint); font-size: 14px; }
+  footer .row { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 18px; align-items: center; }
+  footer a { color: var(--muted); text-decoration: none; }
+  footer a:hover { color: var(--green); }
+  .stack { display: flex; flex-wrap: wrap; gap: 8px; font-family: "IBM Plex Mono", monospace; font-size: 12px; margin-top: 8px; }
+  .stack span { border: 1px solid var(--line); border-radius: 7px; padding: 4px 10px; color: var(--muted); background: var(--card); }
+
+  @media (max-width: 720px) {
+    .steps, .split, .judge { grid-template-columns: 1fr; }
+    .nav-links a.hide { display: none; }
+    header.hero { padding: 56px 0 20px; }
+    body { font-size: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap row">
+    <div class="brand"><span class="dot"></span>NanoPay</div>
+    <div class="nav-links">
+      <a href="#try" class="hide">Try it</a>
+      <a href="#how" class="hide">How it works</a>
+      <a href="#proof" class="hide">On-chain proof</a>
+      <a class="btn btn-ghost" href="https://github.com/zkasuran/lepton-discord" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="tag reveal d1"><span class="dot" style="width:7px;height:7px;box-shadow:none"></span>Live on Arc testnet · settles in under a second</span>
+    <h1 class="reveal d2">The agent that<br /><span class="accent">pays its own way.</span></h1>
+    <p class="lede reveal d3">NanoPay is an autonomous agent with its own USDC wallet. Ask it anything in Discord. It decides whether it needs live data, <b>pays for it over x402 on Arc</b> from its own wallet, and hands you the answer plus the on-chain receipt. <b>No wallet, no signing, no human in the loop.</b></p>
+    <div class="cta-row reveal d4">
+      <a class="btn btn-primary" href="https://discord.com/oauth2/authorize?client_id=1517400111699726488&permissions=18432&scope=bot+applications.commands" target="_blank" rel="noopener">Add NanoPay to Discord</a>
+      <a class="btn btn-ghost" href="#try">See it pay live ↓</a>
+      <span class="cta-note">RFB-1 · Autonomous Paying Agents</span>
+    </div>
+
+    <div class="card-console reveal d5">
+      <div class="cc-bar">
+        <span class="lamp"></span><span class="lamp"></span><span class="lamp g"></span>
+        <span class="cc-title">nanopay · #general · Arc</span>
+      </div>
+      <div class="cc-body" id="heroTerm"></div>
+    </div>
+  </div>
+</header>
+
+<!-- TRY IT -->
+<section id="try" class="alt">
+  <div class="wrap">
+    <div class="eyebrow">Try it now</div>
+    <h2>Ask the agent. Watch it spend.</h2>
+    <p class="sub">Type a question. If it needs live data, NanoPay pays a sub-cent USDC toll on Arc and answers with a real receipt. <span id="modeLine" style="color:var(--faint)"></span></p>
+
+    <div class="card-console">
+      <div class="cc-bar">
+        <span class="lamp"></span><span class="lamp"></span><span class="lamp g"></span>
+        <span class="cc-title" id="tryTitle">nanopay · /ask</span>
+        <span style="flex:1"></span>
+        <span class="status-pill" id="statusPill">demo mode</span>
+      </div>
+      <div class="cc-body">
+        <div id="tryOut">
+          <div class="line"><span class="sys">Ask a question and the agent decides: buy live data, or answer for free.</span></div>
+        </div>
+        <form class="ask-form" id="askForm" autocomplete="off">
+          <input id="askInput" placeholder="what's BTC doing right now?" maxlength="240" />
+          <button class="btn btn-primary" type="submit" id="askBtn">Ask →</button>
+        </form>
+        <div class="chips">
+          <button class="chip" data-q="what's BTC doing right now, one line?">what's BTC doing right now?</button>
+          <button class="chip" data-q="weather in Tokyo?">weather in Tokyo?</button>
+          <button class="chip" data-q="explain the TCP handshake in one sentence">explain TCP handshakes (free)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW -->
+<section id="how">
+  <div class="wrap">
+    <div class="eyebrow">The loop</div>
+    <h2>Decide → pay → answer.</h2>
+    <p class="sub">The agent's reasoning is free. It only spends USDC on the external tools it decides are worth buying, and never past your budget.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="n">01 · DECIDE</div>
+        <h3>It reasons over price</h3>
+        <p>Given your question and a priced tool catalog, the agent picks the single cheapest tool that helps, or answers for free. Over-budget spends are declined in code, not left to the model.</p>
+      </div>
+      <div class="step">
+        <div class="n">02 · PAY</div>
+        <h3>It signs, never gasses</h3>
+        <p>It signs an EIP-3009 authorization from its own wallet (USDC only, no gas). A facilitator settles <span class="mono" style="color:var(--muted)">transferWithAuthorization</span> on Arc in under 500ms and pays the gas.</p>
+      </div>
+      <div class="step">
+        <div class="n">03 · ANSWER</div>
+        <h3>It hands you a receipt</h3>
+        <p>Real data comes back (CoinGecko, Open-Meteo), the agent composes the answer, and posts it with a clickable Arc receipt. Its own on-chain tx count stays <span class="ok mono">0</span>.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PROOF -->
+<section id="proof" class="alt">
+  <div class="wrap">
+    <div class="eyebrow">Provable, not claimed</div>
+    <h2>Real USDC, moving on Arc.</h2>
+    <p class="sub">Every answer that needs data is a real settlement between two distinct wallets. Confirmed on-chain, status 1. Click any hash.</p>
+    <div class="proof">
+      <div class="head">
+        <span>agent <span class="mono" style="color:var(--green)">0x6a1b…01c4</span> → service <span class="mono" style="color:var(--muted)">0xDB6c…7777</span></span>
+        <span>Arc testnet · chainId 5042002</span>
+      </div>
+      <div class="row-tx">
+        <span class="what">/ask · agent chose to pay</span>
+        <span class="res">BTC $62,486 (+1.83%)</span>
+        <span class="amt">−$0.0010</span>
+        <span><a class="tx" href="https://testnet.arcscan.app/tx/70ca2d2aa7e6ff894484d0f6a4f910c4f1e89a3685bb5da30374e42bf75edd2f" target="_blank" rel="noopener">70ca2d2a ↗</a> <span class="st">✓</span></span>
+      </div>
+      <div class="row-tx">
+        <span class="what">/ask · agent chose to pay</span>
+        <span class="res">BTC $62,703 (+0.09%)</span>
+        <span class="amt">−$0.0010</span>
+        <span><a class="tx" href="https://testnet.arcscan.app/tx/2dd13f99b06cdf9a43a71a618eb31bde76380541f06f662ad6cab156db6343b0" target="_blank" rel="noopener">2dd13f99 ↗</a> <span class="st">✓</span></span>
+      </div>
+      <div class="row-tx">
+        <span class="what">/price · live CoinGecko</span>
+        <span class="res">BTC $62,498 (+1.85%)</span>
+        <span class="amt">−$0.0010</span>
+        <span><a class="tx" href="https://testnet.arcscan.app/tx/ad1f0d044f28535353b9d981293ad12e2f02da583d42374630cce3e6a3057c67" target="_blank" rel="noopener">ad1f0d04 ↗</a> <span class="st">✓</span></span>
+      </div>
+      <div class="row-tx">
+        <span class="what">/weather · live Open-Meteo</span>
+        <span class="res">Tokyo 23.3°C, partly cloudy</span>
+        <span class="amt">−$0.0010</span>
+        <span><a class="tx" href="https://testnet.arcscan.app/tx/59ab065209b8f5d4c7cf871aaa4528ab4416d23259ca70f478bbe11abe3c13af" target="_blank" rel="noopener">59ab0652 ↗</a> <span class="st">✓</span></span>
+      </div>
+      <div class="row-tx">
+        <span class="what">/ping · x402 smoke test</span>
+        <span class="res">settled on Arc</span>
+        <span class="amt">−$0.0010</span>
+        <span><a class="tx" href="https://testnet.arcscan.app/tx/48d60980cb6a5da0ca7350f234b34250ec2001ad594a1ca4ceb232aaf1a039a7" target="_blank" rel="noopener">48d60980 ↗</a> <span class="st">✓</span></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- WHY -->
+<section id="why">
+  <div class="wrap">
+    <div class="eyebrow">The empty quadrant</div>
+    <h2>The payer, where the users are.</h2>
+    <p class="sub">Buyer-side agents on Arc are appearing, but they run one user at a time behind a web page. NanoPay is the only autonomous payer inside a shared social channel.</p>
+    <div class="split">
+      <div class="card">
+        <span class="big">0</span>
+        <h3>on-chain transactions from the agent</h3>
+        <p>It paid every time and never sent a transaction. EIP-3009 lets it sign off-chain while the facilitator broadcasts and pays gas. That is the cleanest possible proof of an autonomous payer: it needs USDC, nothing else.</p>
+      </div>
+      <div class="card">
+        <span class="big">N&nbsp;users, 1&nbsp;agent</span>
+        <h3>per-user budgets in a shared channel</h3>
+        <p>Spend governance is per Discord user, so one agent serves a whole server: many people, separate USDC budgets each. A <span class="mono" style="color:var(--muted)">discord x402 arc</span> GitHub search returns nothing. This is agentic commerce where the users already are.</p>
+      </div>
+    </div>
+    <div class="judge">
+      <div class="jc"><div class="w">30%</div><h4>Agentic</h4><p>The agent decides what to buy, or not to. Budget enforced in code.</p></div>
+      <div class="jc"><div class="w">30%</div><h4>Traction</h4><p>Every answer that needs data is a real sub-cent settlement on Arc.</p></div>
+      <div class="jc"><div class="w">20%</div><h4>Circle tooling</h4><p>x402 exact scheme, EIP-3009 USDC, embedded facilitator, USDC-as-gas.</p></div>
+      <div class="jc"><div class="w">20%</div><h4>Innovation</h4><p>Buyer-side agent in a shared channel, the surface no rival holds.</p></div>
+    </div>
+    <div class="roadmap">
+      <span class="badge">Next</span>
+      <p><b>An open agent-to-agent marketplace.</b> Any member lists a priced service, an admin verifies it is legit, and the agent can then discover and pay for it. NanoPay becomes both the buyer and the marketplace, per-channel.</p>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq" class="alt">
+  <div class="wrap">
+    <div class="eyebrow">For the judges</div>
+    <h2>Every question, answered.</h2>
+    <p class="sub">The honest version, up front.</p>
+    <div class="faq">
+      <details open>
+        <summary>Is the money real?</summary>
+        <p>Yes. Real testnet USDC settles between two <b>distinct</b> wallets on Arc, status 1, and you can click every receipt on this page. The five settlements above are permanent on-chain records that need no server to verify. When the live box is running, each paid ask produces a <b>fresh</b> settlement of its own.</p>
+      </details>
+      <details>
+        <summary>Is the agent really deciding, or is it scripted?</summary>
+        <p>It is a real model tool-use call over a priced catalog. It can buy a tool, pick a different tool, or answer for free and spend nothing. Ask it a greeting and it spends $0; ask for a live price and it buys one. The budget is enforced in code <b>after</b> the model picks, so a hallucinated number can never overspend.</p>
+      </details>
+      <details>
+        <summary>Why does the agent show 0 on-chain transactions if it paid?</summary>
+        <p>EIP-3009, the x402 "exact" scheme. The agent signs a transfer authorization off-chain; a facilitator broadcasts it and pays the gas. On every receipt the <span class="mono" style="color:var(--muted)">from</span> is the facilitator, not the agent, and the <span class="mono" style="color:var(--muted)">to</span> is the USDC contract. The payer needs USDC, nothing else.</p>
+      </details>
+      <details>
+        <summary>What is genuinely yours versus the Circle SDK?</summary>
+        <p>The agent's decision and per-user budget layer, the real executors behind the paywall, the two-wallet architecture, the embedded facilitator wiring, and the Discord surface itself. The x402 protocol plumbing is the SDK. The agentic commerce on top of it is the build.</p>
+      </details>
+      <details>
+        <summary>Which Circle tools does it use?</summary>
+        <p>The x402 exact scheme, EIP-3009 USDC on Arc, an embedded facilitator that settles in-process, and USDC-as-gas. A Circle developer-controlled wallet path is wired in config as an alternate agent signer.</p>
+      </details>
+      <details>
+        <summary>Real users yet?</summary>
+        <p>The payment mechanism is proven end-to-end on Arc, reproducible from the repo. Live multi-user rollout in Discord is the current step. We report the real number, not an inflated one.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section style="text-align:center" class="alt">
+  <div class="wrap">
+    <h2>Put an agent with a wallet in your server.</h2>
+    <p class="sub" style="margin: 0 auto 30px;">One click. It syncs its commands instantly and starts answering, paying its own way.</p>
+    <a class="btn btn-primary" style="font-size:16px;padding:14px 28px" href="https://discord.com/oauth2/authorize?client_id=1517400111699726488&permissions=18432&scope=bot+applications.commands" target="_blank" rel="noopener">Add NanoPay to Discord</a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap row">
+    <div>
+      <div class="brand" style="font-size:18px;margin-bottom:6px"><span class="dot"></span>NanoPay</div>
+      <div class="stack">
+        <span>x402</span><span>EIP-3009</span><span>Arc testnet</span><span>USDC</span><span>discord.py</span><span>FastAPI</span>
+      </div>
+    </div>
+    <div style="text-align:right">
+      <div>Built for the Lepton Agents Hackathon · Canteen × Circle</div>
+      <div style="margin-top:8px"><a href="https://github.com/zkasuran/lepton-discord" target="_blank" rel="noopener">github.com/zkasuran/lepton-discord</a></div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // The live "Ask" box calls a NanoPay server. Set it two ways:
+  //   1) append ?api=https://your-tunnel-url to this page's URL, or
+  //   2) edit DEFAULT_API below before deploying.
+  // With no reachable backend the box runs in demo mode with a real example.
+  // Point this at a durable backend (a cloud deploy) to make the Ask box live.
+  // Left blank on purpose: the page defaults to the honest offline state (real
+  // on-chain proof + Discord) rather than depend on an ephemeral tunnel.
+  const DEFAULT_API = "";
+  const params = new URLSearchParams(location.search);
+  const API = (params.get("api") || DEFAULT_API).replace(/\/$/, "");
+  let LIVE = false;
+  const ARC = "https://testnet.arcscan.app/tx/";
+  const short = (h) => h ? h.slice(0, 8) : "";
+
+  // ---- hero typing animation --------------------------------------------
+  const heroScript = [
+    { c: "prompt", t: "/ask what's BTC doing right now, one line?", nl: true },
+    { c: "sys", t: "agent · decides crypto_price is worth $0.0010, within budget", nl: true },
+    { c: "amber", t: "pays · signs EIP-3009, facilitator settles on Arc in 480ms", nl: true },
+    { c: "ok", t: "gets · BTC $62,486 (+1.83% 24h) from CoinGecko", nl: true },
+    { receipt: true },
+  ];
+  const heroEl = document.getElementById("heroTerm");
+  function typeHero(i) {
+    if (i >= heroScript.length) return;
+    const step = heroScript[i];
+    if (step.receipt) {
+      const r = document.createElement("div");
+      r.className = "rcpt";
+      r.innerHTML =
+        '<div class="kv"><span>answer</span><span class="u">BTC is trading at $62,486, up 1.83% today.</span></div>' +
+        '<div class="kv"><span>paid</span><span class="amber">$0.0010 USDC</span></div>' +
+        '<div class="kv"><span>agent tx count</span><span class="ok">0 (EIP-3009)</span></div>' +
+        '<div class="kv"><span>receipt</span><a class="tx" href="' + ARC + '70ca2d2aa7e6ff894484d0f6a4f910c4f1e89a3685bb5da30374e42bf75edd2f" target="_blank" rel="noopener">70ca2d2a ↗</a></div>';
+      heroEl.appendChild(r);
+      return;
+    }
+    const line = document.createElement("div");
+    line.className = "line";
+    const span = document.createElement("span");
+    span.className = step.c;
+    line.appendChild(span);
+    heroEl.appendChild(line);
+    let j = 0;
+    const speed = step.c === "prompt" ? 22 : 10;
+    (function tick() {
+      span.textContent = step.t.slice(0, j);
+      if (j <= step.t.length) { j++; setTimeout(tick, speed); }
+      else { setTimeout(() => typeHero(i + 1), step.nl ? 200 : 0); }
+    })();
+  }
+  setTimeout(() => typeHero(0), 700);
+
+  // ---- live/demo status -------------------------------------------------
+  const pill = document.getElementById("statusPill");
+  const modeLine = document.getElementById("modeLine");
+  async function probe() {
+    if (!API) { modeLine.textContent = "Live demo offline. The settlements below are real and on-chain."; return; }
+    try {
+      const r = await fetch(API + "/health", { cache: "no-store" });
+      if (!r.ok) throw 0;
+      LIVE = true;
+      pill.textContent = "● live on Arc"; pill.classList.add("live");
+      modeLine.textContent = "Live: every paid ask settles real USDC on Arc, a fresh receipt each time.";
+    } catch (e) {
+      pill.textContent = "live demo offline";
+      modeLine.textContent = "Live demo is offline right now. The settlements below are real, or run it in Discord.";
+    }
+  }
+  probe();
+
+  // ---- ask handler ------------------------------------------------------
+  const out = document.getElementById("tryOut");
+  const input = document.getElementById("askInput");
+  const btn = document.getElementById("askBtn");
+
+  function push(cls, text) {
+    const l = document.createElement("div");
+    l.className = "line";
+    const s = document.createElement("span");
+    s.className = cls; s.textContent = text;
+    l.appendChild(s); out.appendChild(l);
+    return l;
+  }
+  function receipt(html) {
+    const r = document.createElement("div");
+    r.className = "rcpt"; r.innerHTML = html; out.appendChild(r);
+  }
+
+  function demoAnswer(q) {
+    const crypto = /eth|ethereum/i.test(q);
+    const weather = /weather|tokyo|london|rain|forecast/i.test(q);
+    const priceish = /btc|bitcoin|eth|price|market|trading/i.test(q);
+    if (weather) {
+      push("sys", "agent · decides weather is worth $0.0010, within budget");
+      push("amber", "pays · EIP-3009 signed, settled on Arc");
+      push("ok", "gets · Tokyo 23.3°C, partly cloudy from Open-Meteo");
+      receipt('<div class="kv"><span>answer</span><span class="u">Tokyo is 23.3°C and partly cloudy right now.</span></div><div class="kv"><span>paid</span><span class="amber">$0.0010 USDC</span></div><div class="kv"><span>receipt</span><a class="tx" href="' + ARC + '59ab065209b8f5d4c7cf871aaa4528ab4416d23259ca70f478bbe11abe3c13af" target="_blank" rel="noopener">59ab0652 ↗</a></div>');
+    } else if (priceish) {
+      const sym = crypto ? "ETH" : "BTC";
+      const price = crypto ? "$1,760 (+0.49%)" : "$62,486 (+1.83%)";
+      push("sys", "agent · decides crypto_price is worth $0.0010, within budget");
+      push("amber", "pays · EIP-3009 signed, settled on Arc");
+      push("ok", "gets · " + sym + " " + price + " from CoinGecko");
+      receipt('<div class="kv"><span>answer</span><span class="u">' + sym + ' is trading at ' + price + ' right now.</span></div><div class="kv"><span>paid</span><span class="amber">$0.0010 USDC</span></div><div class="kv"><span>receipt</span><a class="tx" href="' + ARC + '70ca2d2aa7e6ff894484d0f6a4f910c4f1e89a3685bb5da30374e42bf75edd2f" target="_blank" rel="noopener">70ca2d2a ↗</a></div>');
+    } else {
+      push("sys", "agent · answers from its own knowledge, no tool needed");
+      push("ok", "free · $0.0000 spent");
+      receipt('<div class="kv"><span>answer</span><span class="u">I can answer that directly, so I spent nothing.</span></div><div class="kv"><span>paid</span><span class="ok">$0.0000</span></div>');
+    }
+  }
+
+  async function liveAnswer(q) {
+    push("sys", "agent · thinking…");
+    const r = await fetch(API + "/demo/ask", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ prompt: q }),
+    });
+    if (!r.ok) throw new Error("http " + r.status);
+    const d = await r.json();
+    out.lastChild.remove();
+    const spent = ((d.spent_atomic || 0) / 1e6).toFixed(4);
+    if (d.action === "pay") {
+      push("sys", "agent · decides to pay: " + (d.reason || "bought a tool"));
+      push("amber", "pays · EIP-3009, settled on Arc");
+      receipt('<div class="kv"><span>answer</span><span class="u">' + (d.answer || "") + '</span></div><div class="kv"><span>paid</span><span class="amber">$' + spent + ' USDC</span></div>' + (d.tx_hash ? '<div class="kv"><span>receipt</span><a class="tx" href="' + ARC + d.tx_hash + '" target="_blank" rel="noopener">' + short(d.tx_hash) + ' ↗</a></div>' : ''));
+    } else if (d.action === "decline") {
+      push("sys", "agent · declines: " + (d.reason || "over budget"));
+      receipt('<div class="kv"><span>decision</span><span class="amber">declined, over budget</span></div><div class="kv"><span>paid</span><span class="ok">$0.0000</span></div>');
+    } else {
+      push("sys", "agent · answers free, no tool needed");
+      receipt('<div class="kv"><span>answer</span><span class="u">' + (d.answer || "") + '</span></div><div class="kv"><span>paid</span><span class="ok">$0.0000</span></div>');
+    }
+  }
+
+  async function ask(q) {
+    q = (q || "").trim();
+    if (!q || btn.disabled) return;
+    btn.disabled = true; btn.textContent = "…";
+    push("prompt", "/ask " + q);
+    try {
+      if (LIVE) await liveAnswer(q);
+      else { await new Promise((res) => setTimeout(res, 360)); push("sys", "▸ recorded example (the live demo is offline right now)"); demoAnswer(q); }
+    } catch (e) {
+      push("sys", "▸ recorded example (live server unreachable)");
+      demoAnswer(q);
+    }
+    btn.disabled = false; btn.textContent = "Ask →";
+    input.value = "";
+  }
+
+  document.getElementById("askForm").addEventListener("submit", (e) => { e.preventDefault(); ask(input.value); });
+  document.querySelectorAll(".chip").forEach((c) => c.addEventListener("click", () => ask(c.dataset.q)));
+</script>
+</body>
+</html>

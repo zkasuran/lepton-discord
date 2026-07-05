@@ -11,11 +11,13 @@ Routes:
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from x402.http.constants import PAYMENT_REQUIRED_HEADER, PAYMENT_SIGNATURE_HEADER
 from x402.http.utils import (
@@ -67,6 +69,32 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="NanoPay for Discord", version="0.1.0", lifespan=lifespan)
+
+# The public landing page (GitHub Pages) calls /demo/ask from the browser.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ---- public demo throttle: protect the agent wallet from a runaway browser ----
+DEMO_REQUEST_BUDGET_ATOMIC = 20_000  # $0.02 budget the agent sees per demo call
+DEMO_TOTAL_CAP_ATOMIC = 300_000  # $0.30 total the demo will ever spend, then free-only
+DEMO_MAX_PER_MIN = 5  # per-IP requests per rolling minute
+_demo_hits: dict[str, list[float]] = {}
+_demo_spent = {"atomic": 0}
+
+
+def _demo_rate_ok(ip: str, now: float) -> bool:
+    """True if this IP is under the per-minute limit; records the hit if so."""
+    hits = [t for t in _demo_hits.get(ip, []) if now - t < 60.0]
+    if len(hits) >= DEMO_MAX_PER_MIN:
+        _demo_hits[ip] = hits
+        return False
+    hits.append(now)
+    _demo_hits[ip] = hits
+    return True
 
 
 # ============================================================================
@@ -249,3 +277,65 @@ async def get_budget(user_id: str) -> dict[str, int]:
 @app.get("/supported")
 async def supported() -> Any:
     return facilitator_client.get_supported()
+
+
+@app.post("/demo/ask")
+async def demo_ask(body: dict[str, Any], request: Request) -> dict[str, Any]:
+    """Public browser demo: run the real agent loop and settle on Arc.
+
+    Rate-limited per IP with a global spend cap so public traffic can never drain
+    the agent wallet. Returns the real decision, answer, spend and Arc tx hash, so
+    the landing page shows a fresh on-chain settlement on every paid ask.
+    """
+    from ..agent import planner
+
+    ip = request.client.host if request.client else "unknown"
+    if not _demo_rate_ok(ip, time.time()):
+        raise HTTPException(429, "Slow down a moment, then try again.")
+
+    prompt = str(body.get("prompt", "")).strip()[:240]
+    if not prompt:
+        return {"action": "free", "answer": "Ask me something.", "spent_atomic": 0}
+
+    # Once the demo hits its global cap, keep answering but stop spending.
+    capped = _demo_spent["atomic"] >= DEMO_TOTAL_CAP_ATOMIC
+    budget = 0 if capped else DEMO_REQUEST_BUDGET_ATOMIC
+
+    decision = await planner.decide(prompt, budget)
+
+    if decision.action != "pay" or decision.tool is None:
+        if decision.action == "decline":
+            return {"action": "decline", "reason": decision.reason, "spent_atomic": 0}
+        answer = await planner.answer_free(prompt)
+        return {"action": "free", "reason": decision.reason, "answer": answer, "spent_atomic": 0}
+
+    tool = decision.tool
+    arg_val = decision.args.get(tool.arg_name) or prompt
+    record = PaymentRecord(
+        guild_id="web",
+        channel_id="demo",
+        user_id="web-demo",
+        command_name=tool.command,
+        command_args={tool.arg_name: arg_val},
+        price_atomic=tool.price_atomic,
+    )
+    await store.create_payment(record)
+
+    from ..bot.payer import build_paying_client, pay_and_execute
+
+    payer = build_paying_client()
+    try:
+        result = await pay_and_execute(payer, record.payment_id)
+    finally:
+        await payer.aclose()
+
+    _demo_spent["atomic"] += tool.price_atomic
+    answer = await planner.compose(prompt, tool.name, result.get("result", ""))
+    return {
+        "action": "pay",
+        "reason": decision.reason,
+        "tool": tool.name,
+        "answer": answer,
+        "spent_atomic": tool.price_atomic,
+        "tx_hash": result.get("tx_hash", ""),
+    }
