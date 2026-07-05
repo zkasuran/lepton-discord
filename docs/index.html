@@ -255,7 +255,7 @@
         <span class="lamp"></span><span class="lamp"></span><span class="lamp g"></span>
         <span class="cc-title" id="tryTitle">nanopay · /ask</span>
         <span style="flex:1"></span>
-        <span class="status-pill" id="statusPill">demo mode</span>
+        <span class="status-pill" id="statusPill">preview</span>
       </div>
       <div class="cc-body">
         <div id="tryOut">
@@ -493,7 +493,7 @@
   const pill = document.getElementById("statusPill");
   const modeLine = document.getElementById("modeLine");
   async function probe() {
-    if (!API) { modeLine.textContent = "Live demo offline. The settlements below are real and on-chain."; return; }
+    if (!API) { pill.textContent = "preview"; modeLine.textContent = "This box is a preview. The agent runs live 24/7 in Discord: add it and run /ask for real."; return; }
     try {
       const r = await fetch(API + "/health", { cache: "no-store" });
       if (!r.ok) throw 0;
@@ -578,9 +578,9 @@
     push("prompt", "/ask " + q);
     try {
       if (LIVE) await liveAnswer(q);
-      else { await new Promise((res) => setTimeout(res, 360)); push("sys", "▸ recorded example (the live demo is offline right now)"); demoAnswer(q); }
+      else { await new Promise((res) => setTimeout(res, 360)); push("sys", "▸ preview of a real interaction. Add the bot in Discord to run it live."); demoAnswer(q); }
     } catch (e) {
-      push("sys", "▸ recorded example (live server unreachable)");
+      push("sys", "▸ preview (live server unreachable). Run it live in Discord.");
       demoAnswer(q);
     }
     btn.disabled = false; btn.textContent = "Ask →";
