@@ -29,6 +29,7 @@ from ..payments.config import (
     API_BASE_URL,
     DEFAULT_PRICE_ATOMIC,
     DISCORD_BOT_TOKEN,
+    GUILD_ID,
 )
 from .payer import build_paying_client, pay_and_execute
 
@@ -53,15 +54,31 @@ class NanoPayBot(discord.Client):
     async def setup_hook(self) -> None:
         self._api = httpx.AsyncClient(base_url=API_BASE_URL, timeout=30)
         self._payer = build_paying_client()
-        await self.tree.sync()
-        logger.info("Slash commands synced globally")
+        # Global sync keeps every server eventually current, but can take ~1h to
+        # appear and easily leaves a stale partial set behind.
+        synced_global = await self.tree.sync()
+        logger.info("Synced %d commands globally", len(synced_global))
+        # A configured guild syncs instantly, so a new command shows in seconds
+        # rather than waiting on global propagation.
+        if GUILD_ID:
+            guild = discord.Object(id=int(GUILD_ID))
+            self.tree.copy_global_to(guild=guild)
+            synced = await self.tree.sync(guild=guild)
+            logger.info("Synced %d commands to guild %s (instant)", len(synced), GUILD_ID)
 
     async def on_ready(self) -> None:
         logger.info("NanoPay bot ready as %s", self.user)
         for guild in self.guilds:
             self.tree.copy_global_to(guild=guild)
-            await self.tree.sync(guild=guild)
-            logger.info("Commands synced to guild %s (%s)", guild.name, guild.id)
+            synced = await self.tree.sync(guild=guild)
+            logger.info("Synced %d commands to guild %s (%s)", len(synced), guild.name, guild.id)
+
+    async def on_guild_join(self, guild: discord.Guild) -> None:
+        # A guild invited while the bot is running misses on_ready, so sync here
+        # too, otherwise its commands wait on slow global propagation.
+        self.tree.copy_global_to(guild=guild)
+        synced = await self.tree.sync(guild=guild)
+        logger.info("Joined guild %s (%s); synced %d commands", guild.name, guild.id, len(synced))
 
     async def close(self) -> None:
         if self._api:

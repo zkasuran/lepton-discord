@@ -73,6 +73,9 @@ API_BASE_URL = os.getenv("API_BASE_URL", f"http://localhost:{API_PORT}")
 # Discord
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
 DISCORD_APP_ID = os.getenv("DISCORD_APP_ID", "")
+# Optional: a guild to sync slash commands to on startup. Guild-scoped syncs are
+# instant, unlike global commands which can take up to an hour to appear.
+GUILD_ID = os.getenv("GUILD_ID", "")
 
 # SQLite DB path
 DB_PATH = os.getenv("DB_PATH", "nanopay.db")
