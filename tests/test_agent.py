@@ -69,6 +69,19 @@ async def test_decide_exact_budget_boundary_pays(monkeypatch: pytest.MonkeyPatch
     assert d.action == "pay"
 
 
+async def test_answer_free_applies_nanopay_persona(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, Any] = {}
+
+    async def fake_chat(prompt: str, *, max_tokens: int = 600, system: Any = None) -> str:
+        captured["system"] = system
+        return "I am the NanoPay agent."
+
+    monkeypatch.setattr(planner.llm, "chat", fake_chat)
+    out = await planner.answer_free("what are you?")
+    assert out == "I am the NanoPay agent."
+    assert captured["system"] and "NanoPay" in captured["system"]
+
+
 def test_tool_catalog_lookup() -> None:
     assert get_tool("crypto_price") is not None
     assert get_tool("nope") is None

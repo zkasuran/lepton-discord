@@ -26,6 +26,16 @@ Action = Literal["pay", "decline", "answer_free"]
 # Anthropic tool name for "do not buy anything, answer for free".
 _RESPOND_DIRECTLY = "respond_directly"
 
+# Persona for free answers and composed answers, so the agent stays in character
+# as NanoPay instead of naming the model behind it.
+_PERSONA = (
+    "You are NanoPay, an autonomous agent with your own USDC wallet on the Arc "
+    "network. You answer questions in a Discord channel, and when a question needs "
+    "live data you pay for it yourself over x402. Reply in the first person as "
+    "NanoPay, briefly and directly. Never mention the underlying model or provider "
+    "you run on; if asked what you are, say you are the NanoPay agent."
+)
+
 
 def _norm(name: str) -> str:
     return "".join(c for c in name.lower() if c.isalnum())
@@ -134,7 +144,7 @@ async def answer_free(prompt: str) -> str:
     """Agent answers from its own knowledge — free, no USDC spent."""
     if not llm.available():
         return "AI unavailable: no LLM configured."
-    answer = await llm.chat(prompt, max_tokens=600)
+    answer = await llm.chat(prompt, max_tokens=600, system=_PERSONA)
     return answer or "(no answer)"
 
 
@@ -149,5 +159,6 @@ async def compose(prompt: str, tool_name: str, tool_result: str) -> str:
             "Write a short, direct answer to the user using this result."
         ),
         max_tokens=600,
+        system=_PERSONA,
     )
     return answer or tool_result
