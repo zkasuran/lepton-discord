@@ -459,14 +459,10 @@
 </footer>
 
 <script>
-  // The live "Ask" box calls a NanoPay server. Set it two ways:
-  //   1) append ?api=https://your-tunnel-url to this page's URL, or
-  //   2) edit DEFAULT_API below before deploying.
-  // With no reachable backend the box runs in demo mode with a real example.
-  // Point this at a durable backend (a cloud deploy) to make the Ask box live.
-  // Left blank on purpose: the page defaults to the honest offline state (real
-  // on-chain proof + Discord) rather than depend on an ephemeral tunnel.
-  const DEFAULT_API = "";
+  // Live backend: an always-on server. Every paid ask settles a real USDC
+  // transaction on Arc. Override with ?api=<url> if needed. If the server is ever
+  // unreachable the box falls back to a clearly-labeled recorded example.
+  const DEFAULT_API = "https://nanopay-api.loadline.xyz";
   const params = new URLSearchParams(location.search);
   const API = (params.get("api") || DEFAULT_API).replace(/\/$/, "");
   let LIVE = false;
