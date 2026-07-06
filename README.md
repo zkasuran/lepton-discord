@@ -18,20 +18,27 @@ Agents.
 ## Links
 
 - **Landing page (live):** https://zkasuran.github.io/lepton-discord/
-- **Add NanoPay to your Discord** (the bot runs 24/7, try `/ask` anytime):
+- **Join the demo server** (bot is already there, run `/ask` in `#general`):
+  https://discord.gg/JST4tjKWz
+- **Add NanoPay to your own server** (public bot, syncs its commands instantly):
   https://discord.com/oauth2/authorize?client_id=1517400111699726488&permissions=18432&scope=bot+applications.commands
 - **Source:** https://github.com/zkasuran/lepton-discord
 
 ## Try it right now
 
-The bot is deployed and always on, so you do not need to run anything:
+The bot is deployed and always on, so you do not need to run anything. Two ways:
 
-1. Add it to a server with the invite link above, or join a server that has it.
-2. Run `/ask what's BTC doing right now, one line`. The agent decides it needs a
-   live price, pays a sub-cent USDC toll on Arc, and answers with a clickable
-   receipt.
-3. Run `/ask explain the TCP handshake` and watch it answer for free, spending $0.
-4. Run `/budget` to see your per-user USDC budget.
+1. **Join the demo server** (fastest): https://discord.gg/JST4tjKWz then run `/ask`
+   in `#general`.
+2. **Add it to your own server**: use the invite link above. It is a public bot,
+   so it syncs its 7 commands to your server in seconds. Same agent, many servers.
+
+Then:
+
+- `/ask what's BTC doing right now, one line` -> the agent decides it needs a live
+  price, pays a sub-cent USDC toll on Arc, and answers with a clickable receipt.
+- `/ask explain the TCP handshake` -> it answers for free, spending $0.
+- `/budget` -> your per-user USDC budget.
 
 The landing page shows the same loop with an animated demo, a live "Ask the agent"
 box, the real on-chain settlements below, and a judges FAQ.

@@ -138,6 +138,14 @@
   .status-pill { font-size: 12.5px; padding: 4px 10px; border-radius: 100px; border: 1px solid var(--line2); color: var(--faint); font-family: "IBM Plex Mono", monospace; }
   .status-pill.live { color: var(--green); border-color: var(--green-line); background: var(--green-soft); }
 
+  /* ---- judge try cards ---- */
+  .judge-try { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 22px; }
+  .jt-card { border: 1px solid var(--line); border-radius: 14px; padding: 24px; background: var(--card); box-shadow: var(--shadow); }
+  .jt-card .jt-n { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; color: var(--green); font-weight: 500; text-transform: uppercase; letter-spacing: 0.03em; }
+  .jt-card h3 { font-family: "Fraunces", serif; font-weight: 600; font-size: 20px; margin: 8px 0 8px; letter-spacing: -0.01em; }
+  .jt-card p { color: var(--muted); font-size: 15px; margin-bottom: 18px; }
+  @media (max-width: 720px) { .judge-try { grid-template-columns: 1fr; } }
+
   /* ---- sections ---- */
   section { padding: 76px 0; border-top: 1px solid var(--line); }
   section.alt { background: var(--bg-tint); }
@@ -270,6 +278,21 @@
           <button class="chip" data-q="weather in Tokyo?">weather in Tokyo?</button>
           <button class="chip" data-q="explain the TCP handshake in one sentence">explain TCP handshakes (free)</button>
         </div>
+      </div>
+    </div>
+
+    <div class="judge-try">
+      <div class="jt-card">
+        <div class="jt-n">Fastest</div>
+        <h3>Join the demo server</h3>
+        <p>The bot is already there. Land in <span class="mono" style="color:var(--muted)">#general</span> and run <span class="mono" style="color:var(--muted)">/ask</span>. One click, no setup.</p>
+        <a class="btn btn-primary" href="https://discord.gg/JST4tjKWz" target="_blank" rel="noopener">Join the demo server</a>
+      </div>
+      <div class="jt-card">
+        <div class="jt-n">Or run it in your own</div>
+        <h3>Add the bot to your server</h3>
+        <p>NanoPay is a public bot. Add it to any server you manage and it syncs its commands instantly. Same agent, many servers.</p>
+        <a class="btn btn-ghost" href="https://discord.com/oauth2/authorize?client_id=1517400111699726488&permissions=18432&scope=bot+applications.commands" target="_blank" rel="noopener">Add to your server</a>
       </div>
     </div>
   </div>
