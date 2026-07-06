@@ -25,6 +25,7 @@ import httpx
 from discord import app_commands
 
 from ..agent import planner
+from ..agent.tools import get_tool
 from ..payments.config import (
     API_BASE_URL,
     DEFAULT_PRICE_ATOMIC,
@@ -51,34 +52,38 @@ class NanoPayBot(discord.Client):
         # x402-paying client — auto-handles 402 and retries with EIP-3009 sig
         self._payer: httpx.AsyncClient | None = None
 
+    async def _sync_guild(self, guild: discord.abc.Snowflake) -> None:
+        """Sync commands to one guild only (instant), the single source of truth.
+
+        Copying globals into a guild while ALSO having them registered globally
+        makes Discord show every command twice, so we do not global-sync. The
+        guild copy is authoritative and appears in seconds.
+        """
+        self.tree.copy_global_to(guild=guild)
+        synced = await self.tree.sync(guild=guild)
+        logger.info("Synced %d commands to guild %s", len(synced), getattr(guild, "id", guild))
+
     async def setup_hook(self) -> None:
         self._api = httpx.AsyncClient(base_url=API_BASE_URL, timeout=30)
         self._payer = build_paying_client()
-        # Global sync keeps every server eventually current, but can take ~1h to
-        # appear and easily leaves a stale partial set behind.
-        synced_global = await self.tree.sync()
-        logger.info("Synced %d commands globally", len(synced_global))
-        # A configured guild syncs instantly, so a new command shows in seconds
-        # rather than waiting on global propagation.
+        # Clear any previously-registered GLOBAL commands so they cannot show up
+        # alongside the guild copies as duplicates. Guild-scoped is the only scope
+        # we use.
+        self.tree.clear_commands(guild=None)
+        await self.tree.sync()
+        logger.info("Cleared global commands (guild-scoped is authoritative)")
         if GUILD_ID:
-            guild = discord.Object(id=int(GUILD_ID))
-            self.tree.copy_global_to(guild=guild)
-            synced = await self.tree.sync(guild=guild)
-            logger.info("Synced %d commands to guild %s (instant)", len(synced), GUILD_ID)
+            await self._sync_guild(discord.Object(id=int(GUILD_ID)))
 
     async def on_ready(self) -> None:
         logger.info("NanoPay bot ready as %s", self.user)
         for guild in self.guilds:
-            self.tree.copy_global_to(guild=guild)
-            synced = await self.tree.sync(guild=guild)
-            logger.info("Synced %d commands to guild %s (%s)", len(synced), guild.name, guild.id)
+            await self._sync_guild(guild)
 
     async def on_guild_join(self, guild: discord.Guild) -> None:
         # A guild invited while the bot is running misses on_ready, so sync here
-        # too, otherwise its commands wait on slow global propagation.
-        self.tree.copy_global_to(guild=guild)
-        synced = await self.tree.sync(guild=guild)
-        logger.info("Joined guild %s (%s); synced %d commands", guild.name, guild.id, len(synced))
+        # too, otherwise its commands do not appear.
+        await self._sync_guild(guild)
 
     async def close(self) -> None:
         if self._api:
@@ -135,6 +140,12 @@ def _price_display(atomic: int) -> str:
     return f"${atomic / 1_000_000:.4f}"
 
 
+def _tool_price(name: str) -> int:
+    """Price for a catalog tool in atomic units, falling back to the default."""
+    tool = get_tool(name)
+    return tool.price_atomic if tool else DEFAULT_PRICE_ATOMIC
+
+
 def _result_embed(command_name: str, result: str, tx: str) -> discord.Embed:
     embed = discord.Embed(
         title=f"/{command_name}",
@@ -147,7 +158,7 @@ def _result_embed(command_name: str, result: str, tx: str) -> discord.Embed:
             value=f"[{tx[:16]}...](https://testnet.arcscan.app/tx/{tx})",
             inline=False,
         )
-    embed.set_footer(text="Paid via x402 on Arc Testnet • NanoPay for Discord")
+    embed.set_footer(text="Paid via x402 on Arc Testnet · NanoPay")
     return embed
 
 
@@ -219,7 +230,7 @@ async def _handle_premium_command(
     )
     embed.add_field(name="Amount", value=price_str, inline=True)
     embed.add_field(name="Network", value="Arc Testnet", inline=True)
-    embed.set_footer(text="x402 EIP-3009 • NanoPay for Discord")
+    embed.set_footer(text="x402 EIP-3009 · NanoPay")
 
     view = _PayView(pay_url)
     await interaction.followup.send(embed=embed, view=view, ephemeral=True)
@@ -378,21 +389,21 @@ class _PayView(discord.ui.View):
 # ============================================================================
 
 
-@bot.tree.command(name="weather", description="Current weather — $0.01 USDC via x402")
+@bot.tree.command(name="weather", description="Current weather, $0.001 USDC via x402")
 @app_commands.describe(city="City name")
 async def cmd_weather(interaction: discord.Interaction, city: str) -> None:
-    await _handle_premium_command(interaction, "weather", {"city": city})
+    await _handle_premium_command(interaction, "weather", {"city": city}, _tool_price("weather"))
 
 
-@bot.tree.command(name="price", description="Crypto price — $0.01 USDC via x402")
+@bot.tree.command(name="price", description="Crypto price, $0.001 USDC via x402")
 @app_commands.describe(symbol="Token symbol e.g. BTC, ETH")
 async def cmd_price(interaction: discord.Interaction, symbol: str) -> None:
-    await _handle_premium_command(interaction, "price", {"symbol": symbol})
+    await _handle_premium_command(
+        interaction, "price", {"symbol": symbol}, _tool_price("crypto_price")
+    )
 
 
-@bot.tree.command(
-    name="ask", description="Ask the agent — it decides what (if anything) to pay for"
-)
+@bot.tree.command(name="ask", description="Ask the agent, it decides what (if anything) to pay for")
 @app_commands.describe(prompt="Anything. The agent picks a paid tool only if it helps.")
 async def cmd_ask(interaction: discord.Interaction, prompt: str) -> None:
     await _handle_agent_request(interaction, prompt)
@@ -410,15 +421,17 @@ async def cmd_budget(interaction: discord.Interaction) -> None:
     await interaction.followup.send(embed=embed, ephemeral=True)
 
 
-@bot.tree.command(name="gpt", description="Direct Claude answer — $0.01 USDC via x402")
+@bot.tree.command(name="gpt", description="Direct premium answer, $0.01 USDC via x402")
 @app_commands.describe(prompt="Your question")
 async def cmd_gpt(interaction: discord.Interaction, prompt: str) -> None:
-    await _handle_premium_command(interaction, "ask", {"prompt": prompt})
+    await _handle_premium_command(
+        interaction, "ask", {"prompt": prompt}, _tool_price("deep_answer")
+    )
 
 
-@bot.tree.command(name="ping", description="x402 smoke test — bot pays autonomously")
+@bot.tree.command(name="ping", description="x402 smoke test, $0.001 USDC, bot pays")
 async def cmd_ping(interaction: discord.Interaction) -> None:
-    await _handle_premium_command(interaction, "ping", {})
+    await _handle_premium_command(interaction, "ping", {}, 1000)
 
 
 # ============================================================================
@@ -429,7 +442,7 @@ async def cmd_ping(interaction: discord.Interaction) -> None:
 @bot.tree.command(name="nanopay-info", description="About NanoPay for Discord")
 async def cmd_info(interaction: discord.Interaction) -> None:
     embed = discord.Embed(
-        title="NanoPay — the Discord agent that pays its own way",
+        title="NanoPay, the Discord agent that pays its own way",
         description=(
             "Ask for something behind a paywall. The agent pays an x402 service "
             "in USDC on Arc from its own wallet, settles on-chain, and returns the "
@@ -442,8 +455,12 @@ async def cmd_info(interaction: discord.Interaction) -> None:
     )
     embed.add_field(name="Network", value="Arc Testnet (eip155:5042002)", inline=False)
     embed.add_field(name="Protocol", value="x402 exact — EIP-3009 USDC", inline=False)
-    embed.add_field(name="Default price", value="$0.01 USDC per call", inline=False)
-    embed.set_footer(text="NanoPay — Lepton Agents Hackathon 2026")
+    embed.add_field(
+        name="Pricing",
+        value="$0.001 per data call, $0.01 for a premium answer",
+        inline=False,
+    )
+    embed.set_footer(text="NanoPay, Lepton Agents Hackathon 2026")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
