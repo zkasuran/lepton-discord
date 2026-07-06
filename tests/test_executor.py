@@ -41,6 +41,41 @@ async def test_weather_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "Tokyo" in result and "°C" in result
 
 
+async def test_news_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake(topic: str) -> str:
+        return f"Latest on '{topic}':\n- Headline one\n- Headline two"
+
+    monkeypatch.setattr(executor, "_fetch_news", fake)
+    result = await execute_command("news", {"topic": "World Cup"})
+    assert "World Cup" in result and "Headline one" in result
+
+
+async def test_news_service_error_is_graceful(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def boom(topic: str) -> str:
+        raise RuntimeError("rss down")
+
+    monkeypatch.setattr(executor, "_fetch_news", boom)
+    result = await execute_command("news", {"topic": "Trump"})
+    assert "unavailable" in result.lower()
+
+
+async def test_fetch_news_parses_rss(httpx_mock) -> None:  # type: ignore[no-untyped-def]
+    rss = (
+        "<rss><channel><title>Google News</title>"
+        "<item><title>Mexico 2-3 England: World Cup last 16</title></item>"
+        "<item><title>Trump asks FIFA to review suspension</title></item>"
+        "<item><title>Third story &amp; more</title></item>"
+        "<item><title>Fourth story (should be dropped)</title></item>"
+        "</channel></rss>"
+    )
+    httpx_mock.add_response(text=rss)
+    result = await executor._fetch_news("world cup")
+    assert "world cup" in result
+    assert "Mexico 2-3 England" in result
+    assert "Third story & more" in result  # entity decoded
+    assert "Fourth story" not in result  # capped at 3
+
+
 async def test_ask_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
     async def fake(prompt: str) -> str:
         return f"Answer to: {prompt}"

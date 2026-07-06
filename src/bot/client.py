@@ -10,6 +10,7 @@ Commands:
   /budget                  — show remaining USDC spend budget
   /price symbol:<ticker>   — direct live price (CoinGecko), $0.001
   /weather city:<city>     — direct live weather (Open-Meteo), $0.001
+  /news topic:<topic>      — latest headlines (Google News), $0.001
   /gpt prompt:<text>       — direct premium answer (Claude), $0.01
   /ping                    — x402 smoke test
   /nanopay-info            — about the bot
@@ -66,12 +67,6 @@ class NanoPayBot(discord.Client):
     async def setup_hook(self) -> None:
         self._api = httpx.AsyncClient(base_url=API_BASE_URL, timeout=30)
         self._payer = build_paying_client()
-        # Clear any previously-registered GLOBAL commands so they cannot show up
-        # alongside the guild copies as duplicates. Guild-scoped is the only scope
-        # we use.
-        self.tree.clear_commands(guild=None)
-        await self.tree.sync()
-        logger.info("Cleared global commands (guild-scoped is authoritative)")
         if GUILD_ID:
             await self._sync_guild(discord.Object(id=int(GUILD_ID)))
 
@@ -401,6 +396,12 @@ async def cmd_price(interaction: discord.Interaction, symbol: str) -> None:
     await _handle_premium_command(
         interaction, "price", {"symbol": symbol}, _tool_price("crypto_price")
     )
+
+
+@bot.tree.command(name="news", description="Latest news on any topic, $0.001 USDC via x402")
+@app_commands.describe(topic="Topic, e.g. World Cup, Trump, Tesla")
+async def cmd_news(interaction: discord.Interaction, topic: str) -> None:
+    await _handle_premium_command(interaction, "news", {"topic": topic}, _tool_price("news"))
 
 
 @bot.tree.command(name="ask", description="Ask the agent, it decides what (if anything) to pay for")

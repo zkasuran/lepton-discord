@@ -11,6 +11,7 @@ The network calls are isolated in small helpers (`_fetch_price`, `_fetch_weather
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Awaitable, Callable
 
 import httpx
@@ -155,6 +156,35 @@ async def _ask_claude(prompt: str) -> str:
 # ============================================================================
 
 
+async def _fetch_news(topic: str) -> str:
+    """Latest headlines for a topic from Google News RSS (no API key needed)."""
+    from urllib.parse import quote
+
+    url = f"https://news.google.com/rss/search?q={quote(topic)}&hl=en-US&gl=US&ceid=US:en"
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT, follow_redirects=True) as client:
+        resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0 NanoPay/1.0"})
+        resp.raise_for_status()
+        xml = resp.text
+
+    # Parse the RSS: pull <item><title> entries, skip the feed's own title.
+    items = re.findall(r"<item>(.*?)</item>", xml, re.DOTALL)
+    headlines: list[str] = []
+    for item in items[:3]:
+        m = re.search(r"<title>(.*?)</title>", item, re.DOTALL)
+        if not m:
+            continue
+        title = m.group(1).strip()
+        if title.startswith("<![CDATA[") and title.endswith("]]>"):
+            title = title[9:-3].strip()
+        title = title.replace("&amp;", "&").replace("&#39;", "'").replace("&quot;", '"')
+        if title:
+            headlines.append(title)
+    if not headlines:
+        return f"News for '{topic}': no headlines found right now."
+    lines = "\n".join(f"- {h}" for h in headlines)
+    return f"Latest on '{topic}':\n{lines}"
+
+
 @register("price")
 async def _price(args: dict[str, str]) -> str:
     symbol = args.get("symbol", "BTC")
@@ -186,6 +216,16 @@ async def _ask(args: dict[str, str]) -> str:
     except Exception as exc:  # noqa: BLE001
         logger.warning("claude call failed: %s", exc)
         return "AI service unavailable right now."
+
+
+@register("news")
+async def _news(args: dict[str, str]) -> str:
+    topic = args.get("topic", "").strip() or "world news"
+    try:
+        return await _fetch_news(topic)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("news fetch failed: %s", exc)
+        return f"News for {topic}: service unavailable right now."
 
 
 @register("ping")

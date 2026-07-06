@@ -43,6 +43,18 @@ TOOL_CATALOG: list[ToolSpec] = [
         arg_description="City name, e.g. Tokyo, London",
     ),
     ToolSpec(
+        name="news",
+        command="news",
+        description=(
+            "Latest real news headlines on any topic, person, team or event (Google News). "
+            "Use for current events the agent cannot know: recent results, breaking news, "
+            "who won, what just happened."
+        ),
+        price_atomic=1000,  # $0.001
+        arg_name="topic",
+        arg_description="What to get news about, e.g. 'World Cup', 'Trump', 'Tesla earnings'",
+    ),
+    ToolSpec(
         name="deep_answer",
         command="ask",
         description=(
