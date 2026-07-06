@@ -13,7 +13,7 @@ Agents.
 [![live site](https://img.shields.io/badge/live-zkasuran.github.io%2Flepton--discord-0f8a56)](https://zkasuran.github.io/lepton-discord/)
 [![settles on Arc](https://img.shields.io/badge/settles_on-Arc_testnet-1f1f1f)](https://docs.arc.network)
 [![payments x402](https://img.shields.io/badge/payments-x402_%2B_EIP--3009-2775CA)](https://github.com/circlefin/arc-nanopayments)
-[![tests](https://img.shields.io/badge/tests-53_passing-0f8a56)](#tests)
+[![tests](https://img.shields.io/badge/tests-57_passing-0f8a56)](#tests)
 
 ## Links
 
@@ -31,7 +31,7 @@ The bot is deployed and always on, so you do not need to run anything. Two ways:
 1. **Join the demo server** (fastest): https://discord.gg/JST4tjKWz then run `/ask`
    in `#general`.
 2. **Add it to your own server**: use the invite link above. It is a public bot,
-   so it syncs its 7 commands to your server in seconds. Same agent, many servers.
+   so it syncs its 8 commands to your server in seconds. Same agent, many servers.
 
 Then:
 
@@ -67,7 +67,7 @@ Discord user:  /ask "what's BTC doing and is it a good week to care?"
   real CoinGecko price ──> agent composes the answer
         |
         v
-  Discord:  answer + "paid $0.001 · budget left $0.049 · Arc receipt 0xad1f…"
+  Discord:  answer + "paid $0.001 · budget left $0.499 · Arc receipt 0xad1f…"
 ```
 
 The agent's reasoning is free (it runs on the operator's model). It spends USDC
@@ -130,6 +130,7 @@ pays for paywalled APIs on a budget, without overspending.
 | `/budget` | Show your remaining USDC spend budget | free |
 | `/price <symbol>` | Direct live price (CoinGecko) | $0.001 |
 | `/weather <city>` | Direct live weather (Open-Meteo) | $0.001 |
+| `/news <topic>` | Latest headlines on any topic (Google News) | $0.001 |
 | `/gpt <prompt>` | Direct premium answer (the model, server-side) | $0.01 |
 | `/ping` | x402 smoke test | $0.001 |
 | `/nanopay-info` | About the bot | free |
@@ -212,7 +213,7 @@ production instance runs exactly this, which is why the bot is live 24/7.
 
 ## Tests
 
-`pytest` is green (53 tests) and `mypy --strict` is clean. Network and model calls
+`pytest` is green (57 tests) and `mypy --strict` is clean. Network and model calls
 are mocked, so the suite is deterministic and offline. The on-chain settlements
 above were run separately against live Arc testnet.
 
