@@ -83,13 +83,16 @@ def _form_line(s: TractionSummary) -> str:
             f" between {s.first_paid_at.isoformat(timespec='minutes')} and "
             f"{s.last_paid_at.isoformat(timespec='minutes')} UTC"
         )
+    demo = ""
+    if s.demo_settlements:
+        demo = f", plus {s.demo_settlements} settlements from the public web demo"
     return (
-        f"{s.distinct_paying_users} distinct Discord users triggered "
-        f"{s.settled_payments} autonomous payments{window}, each settled in USDC on "
-        f"Arc testnet (status 1). Total spent ${s.total_spent_usdc:.4f}, average "
-        f"${s.avg_spend_usdc:.4f} per call, all sub-cent. Each user spent under "
-        f"their own per-user budget on one shared agent wallet, so the agent "
-        f"never sent a transaction itself (EIP-3009)."
+        f"{s.distinct_discord_users} distinct Discord users triggered "
+        f"{s.discord_settlements} autonomous payments in the channel{window}{demo}. "
+        f"Every settlement is real USDC on Arc testnet (status 1). Total spent "
+        f"${s.total_spent_usdc:.4f}, average ${s.avg_spend_usdc:.4f} per call, all "
+        f"sub-cent. Each user spent under their own per-user budget on one shared "
+        f"agent wallet, so the agent never sent a transaction itself (EIP-3009)."
     )
 
 
@@ -105,7 +108,10 @@ def main() -> None:
 
     if args.json:
         payload = {
+            "distinct_discord_users": s.distinct_discord_users,
             "distinct_paying_users": s.distinct_paying_users,
+            "discord_settlements": s.discord_settlements,
+            "demo_settlements": s.demo_settlements,
             "settled_payments": s.settled_payments,
             "failed_payments": s.failed_payments,
             "total_spent_usdc": round(s.total_spent_usdc, 6),
@@ -124,8 +130,10 @@ def main() -> None:
     print("NanoPay traction report")
     print("=" * 60)
     print(f"DB: {args.db}   records: {len(records)}")
-    print(f"Distinct paying users : {s.distinct_paying_users}")
-    print(f"Settled payments      : {s.settled_payments}   (failed: {s.failed_payments})")
+    print(f"Distinct Discord users: {s.distinct_discord_users}   (real snowflake IDs)")
+    print(f"Discord settlements   : {s.discord_settlements}")
+    print(f"Web-demo settlements  : {s.demo_settlements}   (browser demo, not counted as users)")
+    print(f"Settled payments (all): {s.settled_payments}   (failed: {s.failed_payments})")
     print(f"Total spent           : ${s.total_spent_usdc:.4f} USDC")
     print(f"Average per call      : ${s.avg_spend_usdc:.4f} USDC")
     print(f"Distinct guilds       : {s.distinct_guilds}")

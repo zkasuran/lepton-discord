@@ -29,12 +29,22 @@ def _as_aware(dt: datetime) -> datetime:
     return dt
 
 
+def _is_discord_user(user_id: str) -> bool:
+    """A real Discord user id is a numeric snowflake. Synthetic buckets used by
+    the browser demo and dev scripts (web-demo, e2e-demo, test) are not numeric,
+    so this cleanly separates real human users from demo/test traffic."""
+    return user_id.isdigit() and len(user_id) >= 15
+
+
 @dataclass
 class TractionSummary:
     """Aggregated, verifiable usage figures for a set of payment records."""
 
     distinct_paying_users: int = 0
+    distinct_discord_users: int = 0
     settled_payments: int = 0
+    discord_settlements: int = 0
+    demo_settlements: int = 0
     failed_payments: int = 0
     total_spent_atomic: int = 0
     distinct_guilds: int = 0
@@ -76,9 +86,15 @@ def summarize_traction(records: list[PaymentRecord]) -> TractionSummary:
 
     paid_times = sorted(_as_aware(r.paid_at) for r in settled if r.paid_at is not None)
 
+    discord_settled = [r for r in settled if _is_discord_user(r.user_id)]
+    demo_settled = [r for r in settled if r.user_id and not _is_discord_user(r.user_id)]
+
     return TractionSummary(
         distinct_paying_users=len({r.user_id for r in settled if r.user_id}),
+        distinct_discord_users=len({r.user_id for r in discord_settled}),
         settled_payments=len(settled),
+        discord_settlements=len(discord_settled),
+        demo_settlements=len(demo_settled),
         failed_payments=len(failed),
         total_spent_atomic=sum(r.price_atomic for r in settled),
         distinct_guilds=len({r.guild_id for r in settled if r.guild_id}),

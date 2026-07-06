@@ -55,6 +55,24 @@ def _paid(
     )
 
 
+def test_splits_discord_users_from_demo_buckets() -> None:
+    """Numeric snowflake IDs are real Discord users; web-demo and dev buckets are
+    counted separately, never as users."""
+    records = [
+        _paid("280597814424240130", "price", 1_000, "0xa1", 1),
+        _paid("1083344551357460490", "ask", 10_000, "0xa2", 2),
+        _paid("280597814424240130", "weather", 1_000, "0xa3", 3),  # same user again
+        _paid("web-demo", "price", 1_000, "0xb1", 4),
+        _paid("web-demo", "price", 1_000, "0xb2", 5),
+    ]
+    s = summarize_traction(records)
+    assert s.distinct_discord_users == 2
+    assert s.discord_settlements == 3
+    assert s.demo_settlements == 2
+    assert s.distinct_paying_users == 3  # 2 discord + web-demo bucket
+    assert s.settled_payments == 5
+
+
 def test_empty_records_zeroed() -> None:
     s = summarize_traction([])
     assert s.distinct_paying_users == 0
