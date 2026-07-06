@@ -115,8 +115,8 @@ pays for paywalled APIs on a budget, without overspending.
   Arc, provable not claimed. The bot is live 24/7 so usage is real, and the
   numbers are computed from the payment store by `scripts/traction_report.py`.
 - **Circle tooling.** x402 HTTP 402 exact scheme, EIP-3009 USDC on Arc, an
-  embedded facilitator that settles in-process, USDC-as-gas. An optional Circle
-  developer-controlled wallet path is wired in config.
+  embedded facilitator that settles in-process, USDC-as-gas, and the two-wallet
+  split that makes each settlement a real transfer between distinct parties.
 - **Innovation.** An autonomous payer inside a shared social channel, the surface
   no rival holds. Buyer-side agents on Arc exist (Keryx is the sharp one), but they
   are single-user web or CLI. NanoPay's spend governance is per-user, so one agent

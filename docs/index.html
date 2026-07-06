@@ -275,6 +275,7 @@
         </form>
         <div class="chips">
           <button class="chip" data-q="what's BTC doing right now, one line?">what's BTC doing right now?</button>
+          <button class="chip" data-q="latest world cup news, one line">latest world cup news?</button>
           <button class="chip" data-q="weather in Tokyo?">weather in Tokyo?</button>
           <button class="chip" data-q="explain the TCP handshake in one sentence">explain TCP handshakes (free)</button>
         </div>
@@ -318,7 +319,7 @@
       <div class="step">
         <div class="n">03 · ANSWER</div>
         <h3>It hands you a receipt</h3>
-        <p>Real data comes back (CoinGecko, Open-Meteo), the agent composes the answer, and posts it with a clickable Arc receipt. Its own on-chain tx count stays <span class="ok mono">0</span>.</p>
+        <p>Real data comes back (CoinGecko, Open-Meteo, Google News), the agent composes the answer, and posts it with a clickable Arc receipt. Its own on-chain tx count stays <span class="ok mono">0</span>.</p>
       </div>
     </div>
   </div>
@@ -425,11 +426,11 @@
       </details>
       <details>
         <summary>Which Circle tools does it use?</summary>
-        <p>The x402 exact scheme, EIP-3009 USDC on Arc, an embedded facilitator that settles in-process, and USDC-as-gas. A Circle developer-controlled wallet path is wired in config as an alternate agent signer.</p>
+        <p>The x402 exact scheme, EIP-3009 USDC on Arc, an embedded facilitator that settles in-process, and USDC-as-gas. The two-wallet split (agent payer, service facilitator) is what makes each settlement a real transfer between distinct parties, not a wallet paying itself.</p>
       </details>
       <details>
         <summary>Real users yet?</summary>
-        <p>The payment mechanism is proven end-to-end on Arc, reproducible from the repo. Live multi-user rollout in Discord is the current step. We report the real number, not an inflated one.</p>
+        <p>Yes, in the event window. The bot runs 24/7, so this is genuine usage: distinct Discord users have paid in the channel, each a real USDC settlement on Arc. The figures come from the payment store via the traction report, not hand-typed, and real Discord users are counted separately from the public web demo. We report the real number, never an inflated one.</p>
       </details>
     </div>
   </div>
