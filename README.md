@@ -13,7 +13,7 @@ Agents.
 [![live site](https://img.shields.io/badge/live-zkasuran.github.io%2Flepton--discord-0f8a56)](https://zkasuran.github.io/lepton-discord/)
 [![settles on Arc](https://img.shields.io/badge/settles_on-Arc_testnet-1f1f1f)](https://docs.arc.network)
 [![payments x402](https://img.shields.io/badge/payments-x402_%2B_EIP--3009-2775CA)](https://github.com/circlefin/arc-nanopayments)
-[![tests](https://img.shields.io/badge/tests-57_passing-0f8a56)](#tests)
+[![tests](https://img.shields.io/badge/tests-63_passing-0f8a56)](#tests)
 
 ## Links
 
@@ -213,7 +213,7 @@ production instance runs exactly this, which is why the bot is live 24/7.
 
 ## Tests
 
-`pytest` is green (57 tests) and `mypy --strict` is clean. Network and model calls
+`pytest` is green (63 tests) and `mypy --strict` is clean. Network and model calls
 are mocked, so the suite is deterministic and offline. The on-chain settlements
 above were run separately against live Arc testnet.
 
