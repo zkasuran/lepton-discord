@@ -284,6 +284,33 @@ async def supported() -> Any:
     return facilitator_client.get_supported()
 
 
+@app.get("/settlements")
+async def settlements(limit: int = 6) -> dict[str, Any]:
+    """Recent real settlements for the public proof wall, newest first.
+
+    The landing page polls this so the "Real USDC, moving on Arc" list reflects
+    fresh on-chain activity instead of a fixed set of hashes. Only PAID records
+    with a real tx hash are returned, from the same store the traction report reads.
+    """
+    limit = max(1, min(limit, 25))
+    records = await store.recent_settlements(limit)
+    rows = [
+        {
+            # Normalize to 0x so the explorer link resolves. Older demo rows were
+            # written before /execute started prefixing the settle hash.
+            "tx_hash": r.tx_hash if r.tx_hash.startswith("0x") else "0x" + r.tx_hash,
+            "command": r.command_name,
+            "amount_atomic": r.price_atomic,
+            "amount_usdc": f"{r.price_atomic / 1_000_000:.4f}",
+            "result": r.result,
+            "source": "web" if r.guild_id == "web" else "discord",
+            "paid_at": r.paid_at.isoformat() if r.paid_at else "",
+        }
+        for r in records
+    ]
+    return {"count": len(rows), "settlements": rows}
+
+
 @app.post("/demo/ask")
 async def demo_ask(body: dict[str, Any], request: Request) -> dict[str, Any]:
     """Public browser demo: run the real agent loop and settle on Arc.

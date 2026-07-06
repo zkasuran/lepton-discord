@@ -336,6 +336,9 @@
         <span>agent <span class="mono" style="color:var(--green)">0x6a1b…01c4</span> → service <span class="mono" style="color:var(--muted)">0xDB6c…7777</span></span>
         <span>Arc testnet · chainId 5042002</span>
       </div>
+      <!-- Live settlements load here from /settlements; these five stay as an
+           offline fallback until the fetch replaces them. -->
+      <div id="txRows">
       <div class="row-tx">
         <span class="what">/ask · agent chose to pay</span>
         <span class="res">BTC $62,486 (+1.83%)</span>
@@ -365,6 +368,7 @@
         <span class="res">settled on Arc</span>
         <span class="amt">−$0.0010</span>
         <span><a class="tx" href="https://testnet.arcscan.app/tx/0x48d60980cb6a5da0ca7350f234b34250ec2001ad594a1ca4ceb232aaf1a039a7" target="_blank" rel="noopener">48d60980 ↗</a> <span class="st">✓</span></span>
+      </div>
       </div>
     </div>
   </div>
@@ -526,6 +530,40 @@
     }
   }
   probe();
+
+  // ---- live proof wall --------------------------------------------------
+  // Pull the most recent real settlements so this list tracks fresh on-chain
+  // activity instead of a fixed set of hashes. The five rows in the markup stay
+  // as an offline fallback if the fetch fails or returns nothing.
+  const txRows = document.getElementById("txRows");
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  function txRowHTML(s) {
+    const amt = "−$" + ((s.amount_atomic || 0) / 1e6).toFixed(4);
+    const res = (s.result || "").replace(/\s+/g, " ").trim().slice(0, 46) || "settled on Arc";
+    const src = s.source === "discord" ? "paid in Discord" : "agent chose to pay";
+    const what = "/" + (s.command || "ask") + " · " + src;
+    const h = s.tx_hash || "";
+    const label = h.replace(/^0x/, "").slice(0, 8);  // match the bare-hex style above
+    return '<div class="row-tx"><span class="what">' + esc(what) + '</span>' +
+      '<span class="res">' + esc(res) + '</span>' +
+      '<span class="amt">' + amt + '</span>' +
+      '<span><a class="tx" href="' + ARC + esc(h) + '" target="_blank" rel="noopener">' +
+      esc(label) + ' ↗</a> <span class="st">✓</span></span></div>';
+  }
+  async function loadSettlements() {
+    if (!API || !txRows) return;
+    try {
+      const r = await fetch(API + "/settlements?limit=6", { cache: "no-store" });
+      if (!r.ok) return;
+      const d = await r.json();
+      const rows = (d && d.settlements) || [];
+      if (!rows.length) return;  // keep the static fallback rows
+      txRows.innerHTML = rows.map(txRowHTML).join("");
+    } catch (e) { /* keep the static fallback rows */ }
+  }
+  loadSettlements();
+  setInterval(loadSettlements, 30000);
 
   // ---- ask handler ------------------------------------------------------
   const out = document.getElementById("tryOut");

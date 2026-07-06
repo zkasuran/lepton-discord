@@ -118,6 +118,23 @@ class PaymentStore:
             )
             await db.commit()
 
+    async def recent_settlements(self, limit: int = 5) -> list[PaymentRecord]:
+        """Return the most recent real settlements, newest first.
+
+        A settlement is a PAID record with a non-empty on-chain tx hash, so a
+        pending or failed attempt (or a paid row that never got a hash) never
+        shows up on the public proof wall.
+        """
+        async with aiosqlite.connect(self._path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM payment_records WHERE status = ? AND tx_hash != ''"
+                " ORDER BY paid_at DESC, created_at DESC LIMIT ?",
+                (PaymentStatus.PAID.value, limit),
+            ) as cursor:
+                rows = await cursor.fetchall()
+        return [_row_to_record(row) for row in rows]
+
     async def total_spent_atomic(self, user_id: str) -> int:
         """Sum of settled (paid) spend for a user, in USDC atomic units."""
         async with aiosqlite.connect(self._path) as db:

@@ -83,3 +83,44 @@ async def test_set_command_price_upsert(store: PaymentStore) -> None:
     await store.set_command_price("g", "weather", 99_000)
     price = await store.get_command_price("g", "weather")
     assert price == 99_000
+
+
+async def test_recent_settlements_only_returns_settled(store: PaymentStore) -> None:
+    # one settled, one still pending, one failed
+    paid = PaymentRecord(guild_id="web", command_name="crypto_price", price_atomic=1_000)
+    await store.create_payment(paid)
+    await store.mark_paid(paid.payment_id, "0xabc", "0xpayer", "BTC $62k")
+
+    pending = PaymentRecord(guild_id="g", command_name="weather")
+    await store.create_payment(pending)
+
+    failed = PaymentRecord(guild_id="g", command_name="ping")
+    await store.create_payment(failed)
+    await store.mark_failed(failed.payment_id, "no funds")
+
+    rows = await store.recent_settlements()
+    assert [r.payment_id for r in rows] == [paid.payment_id]
+    assert all(r.status == PaymentStatus.PAID and r.tx_hash for r in rows)
+
+
+async def test_recent_settlements_excludes_paid_without_hash(store: PaymentStore) -> None:
+    # a PAID row with an empty tx_hash is not a real on-chain settlement
+    rec = PaymentRecord(guild_id="g", command_name="ping")
+    await store.create_payment(rec)
+    await store.mark_paid(rec.payment_id, "", "0xpayer", "pong")
+    assert await store.recent_settlements() == []
+
+
+async def test_recent_settlements_honors_limit_and_orders_newest_first(
+    store: PaymentStore,
+) -> None:
+    for i in range(5):
+        rec = PaymentRecord(guild_id="web", command_name="crypto_price", price_atomic=1_000)
+        await store.create_payment(rec)
+        await store.mark_paid(rec.payment_id, f"0x{i}", "0xpayer", f"tx {i}")
+
+    rows = await store.recent_settlements(limit=3)
+    assert len(rows) == 3
+    # DESC by paid_at: first row is settled no earlier than the last
+    assert rows[0].paid_at is not None and rows[-1].paid_at is not None
+    assert rows[0].paid_at >= rows[-1].paid_at
