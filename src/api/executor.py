@@ -10,9 +10,13 @@ The network calls are isolated in small helpers (`_fetch_price`, `_fetch_weather
 
 from __future__ import annotations
 
+import asyncio
+import ipaddress
 import logging
 import re
+import socket
 from collections.abc import Awaitable, Callable
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -183,6 +187,59 @@ async def _fetch_news(topic: str) -> str:
         return f"News for '{topic}': no headlines found right now."
     lines = "\n".join(f"- {h}" for h in headlines)
     return f"Latest on '{topic}':\n{lines}"
+
+
+async def _url_is_public(url: str) -> tuple[bool, str]:
+    """Reject a marketplace URL that points inside our own network.
+
+    Listing URLs are member-supplied, so without this a listing could aim the
+    paid fetch at localhost or the cloud metadata IP (SSRF). Only public
+    http(s) hosts pass; every resolved address must be global.
+    """
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https"):
+        return False, "only http(s) URLs are allowed"
+    host = parts.hostname or ""
+    if not host:
+        return False, "URL has no host"
+    try:
+        infos = await asyncio.get_running_loop().getaddrinfo(host, None, type=socket.SOCK_STREAM)
+    except OSError:
+        return False, f"cannot resolve host '{host}'"
+    for info in infos:
+        addr = ipaddress.ip_address(info[4][0])
+        if not addr.is_global:
+            return False, f"host '{host}' resolves to a non-public address"
+    return True, ""
+
+
+async def _fetch_market_service(url: str, query: str) -> str:
+    """Call a verified marketplace endpoint: GET url with the query as ?q=."""
+    ok, why = await _url_is_public(url)
+    if not ok:
+        return f"Service URL rejected: {why}."
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT, follow_redirects=False) as client:
+        resp = await client.get(url, params={"q": query})
+        resp.raise_for_status()
+        body = resp.text.strip()
+    if not body:
+        return "Service returned an empty response."
+    return body[:1500]
+
+
+@register("market")
+async def _market(args: dict[str, str]) -> str:
+    """Run a verified marketplace service the agent paid for."""
+    url = args.get("url", "").strip()
+    query = args.get("query", "").strip()
+    name = args.get("service", "service")
+    if not url:
+        return "Marketplace service has no URL configured."
+    try:
+        return await _fetch_market_service(url, query)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("market fetch failed for %s: %s", name, exc)
+        return f"Marketplace service '{name}' unavailable right now."
 
 
 @register("price")

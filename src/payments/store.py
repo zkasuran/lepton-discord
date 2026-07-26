@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 import aiosqlite
 
-from ..domain.models import PaymentRecord, PaymentStatus
+from ..domain.models import MarketplaceService, PaymentRecord, PaymentStatus
 
 _CREATE_SQL = """
 CREATE TABLE IF NOT EXISTS payment_records (
@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS payment_records (
     command_name     TEXT NOT NULL,
     command_args     TEXT NOT NULL DEFAULT '{}',
     price_atomic     INTEGER NOT NULL DEFAULT 0,
+    pay_to           TEXT NOT NULL DEFAULT '',
     status           TEXT NOT NULL DEFAULT 'pending',
     tx_hash          TEXT NOT NULL DEFAULT '',
     payer_address    TEXT NOT NULL DEFAULT '',
@@ -37,6 +38,21 @@ CREATE TABLE IF NOT EXISTS guild_commands (
     enabled         INTEGER NOT NULL DEFAULT 1,
     PRIMARY KEY (guild_id, command_name)
 );
+
+CREATE TABLE IF NOT EXISTS marketplace_services (
+    service_id      TEXT PRIMARY KEY,
+    guild_id        TEXT NOT NULL,
+    lister_id       TEXT NOT NULL,
+    name            TEXT NOT NULL,
+    description     TEXT NOT NULL DEFAULT '',
+    url             TEXT NOT NULL,
+    price_atomic    INTEGER NOT NULL DEFAULT 0,
+    wallet          TEXT NOT NULL,
+    verified        INTEGER NOT NULL DEFAULT 0,
+    verified_by     TEXT NOT NULL DEFAULT '',
+    enabled         INTEGER NOT NULL DEFAULT 1,
+    created_at      TEXT NOT NULL
+);
 """
 
 
@@ -49,6 +65,14 @@ class PaymentStore:
     async def init(self) -> None:
         async with aiosqlite.connect(self._path) as db:
             await db.executescript(_CREATE_SQL)
+            # Migrate a pre-marketplace DB in place: older payment_records have
+            # no pay_to column and ALTER ADD COLUMN is a no-op re-run guard.
+            async with db.execute("PRAGMA table_info(payment_records)") as cursor:
+                cols = {row[1] for row in await cursor.fetchall()}
+            if "pay_to" not in cols:
+                await db.execute(
+                    "ALTER TABLE payment_records ADD COLUMN pay_to TEXT NOT NULL DEFAULT ''"
+                )
             await db.commit()
 
     async def create_payment(self, record: PaymentRecord) -> None:
@@ -57,10 +81,10 @@ class PaymentStore:
                 """
                 INSERT INTO payment_records (
                     payment_id, guild_id, channel_id, user_id,
-                    command_name, command_args, price_atomic,
+                    command_name, command_args, price_atomic, pay_to,
                     status, tx_hash, payer_address, created_at, paid_at,
                     result, interaction_token, application_id
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     record.payment_id,
@@ -70,6 +94,7 @@ class PaymentStore:
                     record.command_name,
                     json.dumps(record.command_args),
                     record.price_atomic,
+                    record.pay_to,
                     record.status.value,
                     record.tx_hash,
                     record.payer_address,
@@ -199,6 +224,81 @@ class PaymentStore:
                 rows = await cursor.fetchall()
         return [(r[0], r[1], r[2]) for r in rows]
 
+    # ---- marketplace ------------------------------------------------------
+
+    async def create_service(self, service: MarketplaceService) -> None:
+        async with aiosqlite.connect(self._path) as db:
+            await db.execute(
+                """
+                INSERT INTO marketplace_services (
+                    service_id, guild_id, lister_id, name, description,
+                    url, price_atomic, wallet, verified, verified_by,
+                    enabled, created_at
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    service.service_id,
+                    service.guild_id,
+                    service.lister_id,
+                    service.name,
+                    service.description,
+                    service.url,
+                    service.price_atomic,
+                    service.wallet,
+                    1 if service.verified else 0,
+                    service.verified_by,
+                    1 if service.enabled else 0,
+                    service.created_at.isoformat(),
+                ),
+            )
+            await db.commit()
+
+    async def get_service(self, service_id: str) -> MarketplaceService | None:
+        async with aiosqlite.connect(self._path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM marketplace_services WHERE service_id = ?", (service_id,)
+            ) as cursor:
+                row = await cursor.fetchone()
+        return _row_to_service(row) if row is not None else None
+
+    async def get_service_by_name(self, guild_id: str, name: str) -> MarketplaceService | None:
+        """Case-insensitive lookup, enabled listings only (any verify state)."""
+        async with aiosqlite.connect(self._path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM marketplace_services"
+                " WHERE guild_id = ? AND lower(name) = lower(?) AND enabled = 1",
+                (guild_id, name),
+            ) as cursor:
+                row = await cursor.fetchone()
+        return _row_to_service(row) if row is not None else None
+
+    async def verify_service(self, service_id: str, admin_id: str) -> bool:
+        """Mark a listing verified. Returns False if the id does not exist."""
+        async with aiosqlite.connect(self._path) as db:
+            cursor = await db.execute(
+                "UPDATE marketplace_services SET verified = 1, verified_by = ?"
+                " WHERE service_id = ?",
+                (admin_id, service_id),
+            )
+            await db.commit()
+        return cursor.rowcount > 0
+
+    async def list_services(
+        self, guild_id: str, verified_only: bool = True
+    ) -> list[MarketplaceService]:
+        """Listings for a guild, newest first. The agent only sees verified ones."""
+        sql = "SELECT * FROM marketplace_services WHERE guild_id = ? AND enabled = 1"
+        if verified_only:
+            sql += " AND verified = 1"
+        sql += " ORDER BY created_at DESC"
+        async with aiosqlite.connect(self._path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(sql, (guild_id,)) as cursor:
+                rows = await cursor.fetchall()
+        return [_row_to_service(row) for row in rows]
+
 
 def _row_to_record(row: sqlite3.Row) -> PaymentRecord:
     return PaymentRecord(
@@ -209,6 +309,7 @@ def _row_to_record(row: sqlite3.Row) -> PaymentRecord:
         command_name=row["command_name"],
         command_args=json.loads(row["command_args"]),
         price_atomic=row["price_atomic"],
+        pay_to=row["pay_to"],
         status=PaymentStatus(row["status"]),
         tx_hash=row["tx_hash"],
         payer_address=row["payer_address"],
@@ -217,4 +318,21 @@ def _row_to_record(row: sqlite3.Row) -> PaymentRecord:
         result=row["result"],
         interaction_token=row["interaction_token"],
         application_id=row["application_id"],
+    )
+
+
+def _row_to_service(row: sqlite3.Row) -> MarketplaceService:
+    return MarketplaceService(
+        service_id=row["service_id"],
+        guild_id=row["guild_id"],
+        lister_id=row["lister_id"],
+        name=row["name"],
+        description=row["description"],
+        url=row["url"],
+        price_atomic=row["price_atomic"],
+        wallet=row["wallet"],
+        verified=bool(row["verified"]),
+        verified_by=row["verified_by"],
+        enabled=bool(row["enabled"]),
+        created_at=datetime.fromisoformat(row["created_at"]),
     )

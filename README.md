@@ -13,7 +13,7 @@ Agents.
 [![live site](https://img.shields.io/badge/live-zkasuran.github.io%2Flepton--discord-0f8a56)](https://zkasuran.github.io/lepton-discord/)
 [![settles on Arc](https://img.shields.io/badge/settles_on-Arc_testnet-1f1f1f)](https://docs.arc.network)
 [![payments x402](https://img.shields.io/badge/payments-x402_%2B_EIP--3009-2775CA)](https://github.com/circlefin/arc-nanopayments)
-[![tests](https://img.shields.io/badge/tests-63_passing-0f8a56)](#tests)
+[![tests](https://img.shields.io/badge/tests-79_passing-0f8a56)](#tests)
 
 ## Links
 
@@ -31,7 +31,7 @@ The bot is deployed and always on, so you do not need to run anything. Two ways:
 1. **Join the demo server** (fastest): https://discord.gg/JST4tjKWz then run `/ask`
    in `#general`.
 2. **Add it to your own server**: use the invite link above. It is a public bot,
-   so it syncs its 8 commands to your server in seconds. Same agent, many servers.
+   so it syncs its 11 commands to your server in seconds. Same agent, many servers.
 
 Then:
 
@@ -132,8 +132,28 @@ pays for paywalled APIs on a budget, without overspending.
 | `/weather <city>` | Direct live weather (Open-Meteo) | $0.001 |
 | `/news <topic>` | Latest headlines on any topic (Google News) | $0.001 |
 | `/gpt <prompt>` | Direct premium answer (the model, server-side) | $0.01 |
+| `/sell` | List your own priced service on this server's marketplace | free |
+| `/verify-service <name>` | Admin approves a listing so the agent can buy it | free |
+| `/services` | Browse this server's marketplace | free |
 | `/ping` | x402 smoke test | $0.001 |
 | `/nanopay-info` | About the bot | free |
+
+## The marketplace
+
+The channel is not just a buyer anymore, it is a market. Any member can list a
+priced service with `/sell`: a public http(s) endpoint, a sub-cent price (capped
+at $0.01 per call) and the wallet that gets paid. The listing stays invisible to
+the agent until a server admin approves it with `/verify-service`, so an unvetted
+endpoint never spends the agent's money. Once verified, the service joins the
+agent's tool catalog for that server: when someone's `/ask` matches what the
+service offers, the agent buys it over x402 and the USDC settles to the lister's
+wallet, not the house. `/services` shows the catalog, verified and pending.
+
+Guardrails, because listings are member-supplied: names are namespaced
+(`market_*`) so a listing can never shadow a builtin tool, the endpoint URL is
+resolved and refused if any address is non-public (no SSRF into localhost or
+cloud metadata), prices are capped and the per-user budget still binds every
+purchase.
 
 ## Architecture
 
@@ -213,15 +233,18 @@ production instance runs exactly this, which is why the bot is live 24/7.
 
 ## Tests
 
-`pytest` is green (63 tests) and `mypy --strict` is clean. Network and model calls
+`pytest` is green (79 tests) and `mypy --strict` is clean. Network and model calls
 are mocked, so the suite is deterministic and offline. The on-chain settlements
 above were run separately against live Arc testnet.
 
 ## Roadmap
 
-An open agent-to-agent marketplace: any member lists a priced service, an admin
-verifies it is legit, and the agent can then discover and pay for it. NanoPay
-becomes both the buyer and the marketplace, per channel.
+Shipped: the open agent-to-agent marketplace. Any member lists a priced service,
+an admin verifies it is legit, and the agent discovers and pays for it, straight
+to the lister's wallet. NanoPay is both the buyer and the marketplace, per
+channel. Next: reputation for listings (settlement history per service) and
+letting a listed service itself be another NanoPay agent, closing the
+agent-pays-agent loop across servers.
 
 ## Security
 

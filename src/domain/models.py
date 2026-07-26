@@ -55,6 +55,10 @@ class PaymentRecord:
     command_name: str = ""
     command_args: dict[str, str] = field(default_factory=dict)
     price_atomic: int = 0
+    # Override for the x402 payTo address. Empty means the default service
+    # wallet; a marketplace payment sets it to the lister's wallet so the USDC
+    # settles to the member who listed the service.
+    pay_to: str = ""
     status: PaymentStatus = PaymentStatus.PENDING
     tx_hash: str = ""
     payer_address: str = ""
@@ -77,3 +81,31 @@ class GuildConfig:
     # Per-command configs keyed by command_name
     commands: dict[str, CommandConfig] = field(default_factory=dict)
     enabled: bool = True
+
+
+@dataclass
+class MarketplaceService:
+    """A priced service a member listed on the per-guild marketplace.
+
+    A member lists an HTTP endpoint, a price and the wallet that should
+    receive the USDC. An admin verifies it is legit before the agent can
+    discover and pay for it, so an unvetted listing never spends the agent's
+    money.
+    """
+
+    service_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    guild_id: str = ""
+    lister_id: str = ""  # Discord user who listed it, receives the USDC
+    name: str = ""
+    description: str = ""
+    url: str = ""  # GET endpoint the service answers on; ?q=<arg> is appended
+    price_atomic: int = 0
+    wallet: str = ""  # payTo address for this service's settlements
+    verified: bool = False
+    verified_by: str = ""  # admin user id who approved the listing
+    enabled: bool = True
+    created_at: datetime = field(default_factory=_utcnow)
+
+    @property
+    def price_display(self) -> str:
+        return f"${self.price_atomic / 1_000_000:.4f}"

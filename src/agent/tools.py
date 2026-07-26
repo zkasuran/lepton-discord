@@ -72,3 +72,47 @@ _BY_NAME = {t.name: t for t in TOOL_CATALOG}
 
 def get_tool(name: str) -> ToolSpec | None:
     return _BY_NAME.get(name)
+
+
+# ============================================================================
+# Marketplace tools — per-guild, discovered at ask time
+# ============================================================================
+
+
+@dataclass(frozen=True)
+class MarketToolSpec(ToolSpec):
+    """A verified marketplace listing exposed to the planner as a priced tool.
+
+    Carries what the payment path needs beyond a builtin tool: the endpoint to
+    call and the lister's wallet the USDC settles to.
+    """
+
+    url: str = ""
+    wallet: str = ""
+    service_name: str = ""  # the listing's own name, without the market_ prefix
+
+
+def market_tool(
+    name: str,
+    description: str,
+    url: str,
+    price_atomic: int,
+    wallet: str,
+) -> MarketToolSpec:
+    """Build the ToolSpec for a verified listing.
+
+    The `market_` prefix keeps listing names from colliding with (or shadowing)
+    the builtin catalog, and `command="market"` routes execution through the
+    marketplace proxy executor.
+    """
+    return MarketToolSpec(
+        name=f"market_{name}",
+        command="market",
+        description=f"{description or name} (community service listed in this server).",
+        price_atomic=price_atomic,
+        arg_name="query",
+        arg_description="The request to send this service",
+        url=url,
+        wallet=wallet,
+        service_name=name,
+    )

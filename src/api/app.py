@@ -6,11 +6,15 @@ Routes:
   GET  /status/{payment_id}   — Payment status (polled by bot)
   GET  /supported             — x402 facilitator supported schemes
   GET  /health                — Health check
+  POST /market/list           — Member lists a priced service (unverified)
+  POST /market/verify         — Admin verifies a listing so the agent can buy it
+  GET  /market/services/{gid} — The per-guild marketplace catalog
 """
 
 from __future__ import annotations
 
 import logging
+import re
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -26,7 +30,7 @@ from x402.http.utils import (
 )
 from x402.schemas import PaymentRequired, PaymentRequirements
 
-from ..domain.models import PaymentRecord, PaymentStatus
+from ..domain.models import MarketplaceService, PaymentRecord, PaymentStatus
 from ..payments.config import (
     API_BASE_URL,
     ARC_NETWORK,
@@ -102,14 +106,14 @@ def _demo_rate_ok(ip: str, now: float) -> bool:
 # ============================================================================
 
 
-def _build_requirements(price_atomic: int) -> PaymentRequirements:
+def _build_requirements(price_atomic: int, pay_to: str = "") -> PaymentRequirements:
     return PaymentRequirements.model_validate(
         {
             "scheme": "exact",
             "network": ARC_NETWORK,
             "asset": ARC_USDC_ADDRESS,
             "amount": str(price_atomic),
-            "payTo": SELLER_WALLET_ADDRESS,
+            "payTo": pay_to or SELLER_WALLET_ADDRESS,
             "maxTimeoutSeconds": 60,
             "extra": {
                 "name": ARC_USDC_NAME,
@@ -160,7 +164,7 @@ async def payment_page(payment_id: str) -> HTMLResponse:
         "resource": f"{API_BASE_URL}/execute",
         "description": "NanoPay: premium command",
         "mimeType": "application/json",
-        "payTo": SELLER_WALLET_ADDRESS,
+        "payTo": record.pay_to or SELLER_WALLET_ADDRESS,
         "maxTimeoutSeconds": 60,
         "asset": ARC_USDC_ADDRESS,
         "extra": {"name": ARC_USDC_NAME, "version": ARC_USDC_VERSION},
@@ -188,7 +192,7 @@ async def execute_paid_command(payment_id: str, request: Request) -> Response:
     )
 
     price_atomic = record.price_atomic or DEFAULT_PRICE_ATOMIC
-    reqs = _build_requirements(price_atomic)
+    reqs = _build_requirements(price_atomic, record.pay_to)
 
     if not sig_header:
         return _402_response(reqs)
@@ -256,6 +260,7 @@ async def create_payment_record(body: dict[str, Any]) -> dict[str, str]:
         command_name=body.get("command_name", ""),
         command_args=body.get("command_args", {}),
         price_atomic=int(body.get("price_atomic", DEFAULT_PRICE_ATOMIC)),
+        pay_to=str(body.get("pay_to", "")),
         interaction_token=body.get("interaction_token", ""),
         application_id=body.get("application_id", ""),
     )
@@ -282,6 +287,102 @@ async def get_budget(user_id: str) -> dict[str, int]:
 @app.get("/supported")
 async def supported() -> Any:
     return facilitator_client.get_supported()
+
+
+# ============================================================================
+# Marketplace: members list priced services, admins verify, the agent buys
+# ============================================================================
+
+# A listing can never price itself above this, so a rogue listing cannot eat a
+# whole per-user budget in one call.
+MARKET_MAX_PRICE_ATOMIC = 10_000  # $0.01
+
+_ADDRESS_RE = re.compile(r"^0x[0-9a-fA-F]{40}$")
+
+
+@app.post("/market/list")
+async def market_list(body: dict[str, Any]) -> dict[str, Any]:
+    """A member lists a priced service. It stays invisible to the agent until
+    an admin verifies it."""
+    name = str(body.get("name", "")).strip()[:40]
+    url = str(body.get("url", "")).strip()[:400]
+    wallet = str(body.get("wallet", "")).strip()
+    guild_id = str(body.get("guild_id", "")).strip()
+    lister_id = str(body.get("lister_id", "")).strip()
+    description = str(body.get("description", "")).strip()[:200]
+    try:
+        price_atomic = int(body.get("price_atomic", 0))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "price_atomic must be an integer") from None
+
+    if not (name and url and guild_id and lister_id):
+        raise HTTPException(400, "name, url, guild_id and lister_id are required")
+    if not re.fullmatch(r"[a-z0-9_]{3,40}", name):
+        raise HTTPException(400, "name must be 3-40 chars of a-z, 0-9 and _")
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(400, "url must be http(s)")
+    if not _ADDRESS_RE.fullmatch(wallet):
+        raise HTTPException(400, "wallet must be a 0x address (receives the USDC)")
+    if not 0 < price_atomic <= MARKET_MAX_PRICE_ATOMIC:
+        cap = MARKET_MAX_PRICE_ATOMIC / 1_000_000
+        raise HTTPException(400, f"price_atomic must be 1..{MARKET_MAX_PRICE_ATOMIC} (${cap:.2f})")
+    if await store.get_service_by_name(guild_id, name) is not None:
+        raise HTTPException(409, f"a service named '{name}' already exists in this server")
+
+    service = MarketplaceService(
+        guild_id=guild_id,
+        lister_id=lister_id,
+        name=name,
+        description=description,
+        url=url,
+        price_atomic=price_atomic,
+        wallet=wallet,
+    )
+    await store.create_service(service)
+    return {"service_id": service.service_id, "name": service.name, "verified": False}
+
+
+@app.post("/market/verify")
+async def market_verify(body: dict[str, Any]) -> dict[str, Any]:
+    """An admin approves a listing; only then can the agent discover and pay it.
+
+    The Discord bot checks the caller's admin permission before calling this.
+    """
+    guild_id = str(body.get("guild_id", "")).strip()
+    name = str(body.get("name", "")).strip()
+    admin_id = str(body.get("admin_id", "")).strip()
+    if not (guild_id and name and admin_id):
+        raise HTTPException(400, "guild_id, name and admin_id are required")
+    service = await store.get_service_by_name(guild_id, name)
+    if service is None:
+        raise HTTPException(404, f"no service named '{name}' in this server")
+    if service.verified:
+        return {"service_id": service.service_id, "name": service.name, "verified": True}
+    await store.verify_service(service.service_id, admin_id)
+    return {"service_id": service.service_id, "name": service.name, "verified": True}
+
+
+@app.get("/market/services/{guild_id}")
+async def market_services(guild_id: str, all: bool = False) -> dict[str, Any]:
+    """The per-guild catalog. Default shows what the agent can buy (verified);
+    ?all=true includes pending listings so admins can see what needs review."""
+    services = await store.list_services(guild_id, verified_only=not all)
+    return {
+        "count": len(services),
+        "services": [
+            {
+                "name": s.name,
+                "description": s.description,
+                "url": s.url,
+                "price_atomic": s.price_atomic,
+                "price_usdc": s.price_display,
+                "wallet": s.wallet,
+                "verified": s.verified,
+                "lister_id": s.lister_id,
+            }
+            for s in services
+        ],
+    }
 
 
 @app.get("/settlements")

@@ -12,6 +12,9 @@ Commands:
   /weather city:<city>     — direct live weather (Open-Meteo), $0.001
   /news topic:<topic>      — latest headlines (Google News), $0.001
   /gpt prompt:<text>       — direct premium answer (Claude), $0.01
+  /sell                    — list your own priced service on the marketplace
+  /verify-service          — admin approves a listing so the agent can buy it
+  /services                — browse this server's marketplace
   /ping                    — x402 smoke test
   /nanopay-info            — about the bot
 """
@@ -26,7 +29,7 @@ import httpx
 from discord import app_commands
 
 from ..agent import planner
-from ..agent.tools import get_tool
+from ..agent.tools import TOOL_CATALOG, MarketToolSpec, ToolSpec, get_tool, market_tool
 from ..payments.config import (
     API_BASE_URL,
     DEFAULT_PRICE_ATOMIC,
@@ -105,6 +108,7 @@ async def _create_payment(
     interaction_token: str,
     application_id: str,
     price_atomic: int = DEFAULT_PRICE_ATOMIC,
+    pay_to: str = "",
 ) -> dict[str, str]:
     assert bot._api is not None
     resp = await bot._api.post(
@@ -116,6 +120,7 @@ async def _create_payment(
             "command_name": command_name,
             "command_args": command_args,
             "price_atomic": price_atomic,
+            "pay_to": pay_to,
             "interaction_token": interaction_token,
             "application_id": application_id,
         },
@@ -129,6 +134,37 @@ async def _get_budget(user_id: str) -> dict[str, int]:
     resp = await bot._api.get(f"/budget/{user_id}")
     resp.raise_for_status()
     return resp.json()  # type: ignore[no-any-return]
+
+
+async def _guild_catalog(guild_id: str) -> list[ToolSpec]:
+    """Builtins plus this guild's verified marketplace services.
+
+    A marketplace outage never blocks /ask: on any error the agent just plans
+    over the builtin catalog.
+    """
+    assert bot._api is not None
+    try:
+        resp = await bot._api.get(f"/market/services/{guild_id}")
+        resp.raise_for_status()
+        services = resp.json().get("services", [])
+    except Exception as exc:
+        logger.debug("market catalog fetch failed for guild %s: %s", guild_id, exc)
+        return list(TOOL_CATALOG)
+    extra: list[ToolSpec] = []
+    for s in services:
+        try:
+            extra.append(
+                market_tool(
+                    name=str(s["name"]),
+                    description=str(s.get("description", "")),
+                    url=str(s.get("url", "")),
+                    price_atomic=int(s["price_atomic"]),
+                    wallet=str(s.get("wallet", "")),
+                )
+            )
+        except (KeyError, TypeError, ValueError):
+            continue
+    return list(TOOL_CATALOG) + extra
 
 
 def _price_display(atomic: int) -> str:
@@ -246,8 +282,10 @@ async def _handle_agent_request(interaction: discord.Interaction, prompt: str) -
         return
     remaining = budget["remaining_atomic"]
 
+    guild_id = str(interaction.guild_id or "dm")
+    catalog = await _guild_catalog(guild_id)
     try:
-        decision = await planner.decide(prompt, remaining)
+        decision = await planner.decide(prompt, remaining, catalog)
     except Exception as exc:
         logger.warning("agent decide failed: %s", exc)
         await interaction.followup.send(
@@ -289,16 +327,25 @@ async def _handle_agent_request(interaction: discord.Interaction, prompt: str) -
     assert decision.tool is not None
     tool = decision.tool
     arg_val = decision.args.get(tool.arg_name) or prompt
+    command_args = {tool.arg_name: arg_val}
+    pay_to = ""
+    if isinstance(tool, MarketToolSpec):
+        # Marketplace buy: the market executor needs the endpoint, and the
+        # settlement goes to the lister's wallet instead of the house service.
+        command_args["url"] = tool.url
+        command_args["service"] = tool.service_name
+        pay_to = tool.wallet
     try:
         data = await _create_payment(
-            guild_id=str(interaction.guild_id or "dm"),
+            guild_id=guild_id,
             channel_id=str(interaction.channel_id or ""),
             user_id=user_id,
             command_name=tool.command,
-            command_args={tool.arg_name: arg_val},
+            command_args=command_args,
             interaction_token=interaction.token,
             application_id=str(interaction.application_id),
             price_atomic=tool.price_atomic,
+            pay_to=pay_to,
         )
         result_data = await pay_and_execute(bot._payer, data["payment_id"])  # type: ignore[arg-type]
     except Exception as exc:
@@ -433,6 +480,124 @@ async def cmd_gpt(interaction: discord.Interaction, prompt: str) -> None:
 @bot.tree.command(name="ping", description="x402 smoke test, $0.001 USDC, bot pays")
 async def cmd_ping(interaction: discord.Interaction) -> None:
     await _handle_premium_command(interaction, "ping", {}, 1000)
+
+
+# ============================================================================
+# Marketplace commands
+# ============================================================================
+
+
+@bot.tree.command(
+    name="sell",
+    description="List your own priced service on this server's marketplace",
+)
+@app_commands.describe(
+    name="Service name (a-z, 0-9, _)",
+    url="Public http(s) endpoint; the agent calls it with ?q=<request>",
+    price="Price per call in USDC, e.g. 0.001 (max 0.01)",
+    wallet="Your 0x wallet that receives the USDC",
+    description="What the service answers, so the agent knows when to buy it",
+)
+async def cmd_sell(
+    interaction: discord.Interaction,
+    name: str,
+    url: str,
+    price: float,
+    wallet: str,
+    description: str,
+) -> None:
+    await interaction.response.defer(ephemeral=True)
+    assert bot._api is not None
+    resp = await bot._api.post(
+        "/market/list",
+        json={
+            "guild_id": str(interaction.guild_id or "dm"),
+            "lister_id": str(interaction.user.id),
+            "name": name.strip().lower(),
+            "url": url,
+            "price_atomic": int(round(price * 1_000_000)),
+            "wallet": wallet,
+            "description": description,
+        },
+    )
+    if resp.status_code != 200:
+        detail = resp.json().get("detail", resp.text[:200])
+        await interaction.followup.send(f"Listing rejected: {detail}", ephemeral=True)
+        return
+    embed = discord.Embed(
+        title=f"Listed: {name.strip().lower()}",
+        description=(
+            "Your service is on this server's marketplace, pending admin review. "
+            "Once an admin runs `/verify-service`, the agent can discover it and "
+            "pay your wallet per call."
+        ),
+        color=0xF59E0B,
+    )
+    embed.add_field(name="Price", value=f"${price:.4f} USDC per call", inline=True)
+    embed.add_field(name="Pays to", value=f"`{wallet[:10]}…`", inline=True)
+    embed.set_footer(text="NanoPay marketplace • awaiting verification")
+    await interaction.followup.send(embed=embed, ephemeral=True)
+
+
+@bot.tree.command(
+    name="verify-service",
+    description="Admin: approve a marketplace listing so the agent can buy it",
+)
+@app_commands.describe(name="The listed service name to approve")
+async def cmd_verify_service(interaction: discord.Interaction, name: str) -> None:
+    perms = getattr(interaction.user, "guild_permissions", None)
+    if not (perms and (perms.administrator or perms.manage_guild)):
+        await interaction.response.send_message(
+            "Only a server admin can verify a listing.", ephemeral=True
+        )
+        return
+    await interaction.response.defer(ephemeral=True)
+    assert bot._api is not None
+    resp = await bot._api.post(
+        "/market/verify",
+        json={
+            "guild_id": str(interaction.guild_id or "dm"),
+            "name": name.strip().lower(),
+            "admin_id": str(interaction.user.id),
+        },
+    )
+    if resp.status_code != 200:
+        detail = resp.json().get("detail", resp.text[:200])
+        await interaction.followup.send(f"Could not verify: {detail}", ephemeral=True)
+        return
+    await interaction.followup.send(
+        f"`{name.strip().lower()}` is verified. The agent can now discover it in "
+        "/ask and pay the lister's wallet per call.",
+        ephemeral=True,
+    )
+
+
+@bot.tree.command(
+    name="services",
+    description="Browse this server's marketplace: what the agent can buy here",
+)
+async def cmd_services(interaction: discord.Interaction) -> None:
+    await interaction.response.defer(ephemeral=True)
+    assert bot._api is not None
+    resp = await bot._api.get(f"/market/services/{interaction.guild_id or 'dm'}?all=true")
+    resp.raise_for_status()
+    services = resp.json().get("services", [])
+    embed = discord.Embed(title="This server's marketplace", color=0x7C3AED)
+    if not services:
+        embed.description = (
+            "No services listed yet. Any member can list one with `/sell`: "
+            "a public endpoint, a sub-cent price and the wallet that gets paid."
+        )
+    else:
+        for s in services[:12]:
+            status = "verified, agent can buy it" if s.get("verified") else "pending admin review"
+            embed.add_field(
+                name=f"{s['name']} · {s['price_usdc']}",
+                value=f"{s.get('description') or 'no description'}\n_{status}_",
+                inline=False,
+            )
+    embed.set_footer(text="NanoPay marketplace • the agent pays listers directly")
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 # ============================================================================

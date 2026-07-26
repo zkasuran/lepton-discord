@@ -79,7 +79,9 @@ async def decide(
     if not name:
         return Decision("answer_free", reason or "No paid data needed for this.")
 
-    tool = get_tool(str(name))
+    # Resolve within the catalog we actually offered the model, so per-guild
+    # marketplace tools work; the static lookup only knows the builtins.
+    tool = next((t for t in catalog if t.name == str(name)), None) or get_tool(str(name))
     if tool is None:
         return Decision("answer_free", f"Planner picked unknown tool '{name}'; answering directly.")
 
